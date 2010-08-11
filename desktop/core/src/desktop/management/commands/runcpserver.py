@@ -28,7 +28,7 @@ CPSERVER_HELP = r"""
 
 CPSERVER_OPTIONS = {
   'host': conf.HTTP_HOST.get(),
-  'port': conf.HTTP_PORT.get(),
+  'port': conf.CHERRYPY_PORT.get(),
   'server_name': 'localhost',
   'threads': conf.CHERRYPY_SERVER_THREADS.get(),
   'daemonize': False, # supervisor does this for us

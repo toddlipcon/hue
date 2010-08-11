@@ -30,9 +30,14 @@ HTTP_HOST = Config(
   default="0.0.0.0")
 HTTP_PORT = Config(
   key="http_port",
-  help="HTTP Port to bind to",
+  help="Port used by the outward-facing proxy server",
   type=int,
   default=8088)
+TORNADO_PORT = Config(
+  key="http_port",
+  help="Port used by the Tornado long-polling server",
+  type=int,
+  default=8086)
 SSL_CERTIFICATE = Config(
   key="ssl_certificate",
   help="Filename of SSL Certificate",
@@ -51,6 +56,11 @@ CHERRYPY_SERVER_THREADS = Config(
   help="Number of threads used by the CherryPy web server.",
   type=int,
   default=10)
+CHERRYPY_PORT = Config(
+  key="http_port",
+  help="Port used by the CherryPy web server",
+  type=int,
+  default=8087)
 SECRET_KEY = Config(
   key="secret_key",
   help="Used in hashing algorithms for sessions.",
@@ -207,7 +217,7 @@ AUTH = ConfigSection(
     BACKEND=Config("backend",
                    default="desktop.auth.backend.AllowFirstUserDjangoBackend",
                    help="Authentication backend.  Common settings are "
-                        "django.contrib.auth.backends.ModelBackend (fully Django backend), " + 
+                        "django.contrib.auth.backends.ModelBackend (fully Django backend), " +
                         "desktop.auth.backend.AllowAllBackend (allows everyone), " +
                         "desktop.auth.backend.AllowFirstUserDjangoBackend (relies on Django and user manager, after the first login), "),
     USER_AUGMENTOR=Config("user_augmentor",
@@ -227,7 +237,7 @@ LOCAL_FILESYSTEMS = UnspecifiedConfigSection(
 def default_feedback_url():
   """A version-specific URL."""
   return "http://groups.google.com/a/cloudera.org/group/hue-user"
-  
+
 FEEDBACK_URL = Config(
   key="feedback_url",
   help="Link for 'feedback' tab.",

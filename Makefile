@@ -159,8 +159,12 @@ $(BLD_DIR_ENV)/stamp:
 # <<<< DEV ONLY
 desktop: crepo
 # END DEV ONLY >>>>
-desktop: virtual-env
+desktop: virtual-env nginx
 	@$(MAKE) -C desktop
+
+.PHONY: nginx
+nginx:
+	@$(MAKE) -C $(THIRDPARTY_C_DIR) nginx
 
 ###################################
 # Build apps
@@ -233,6 +237,7 @@ clean:
 	@rm -rf $(BLD_DIR_ENV)
 	@$(MAKE) -C desktop clean
 	@$(MAKE) -C apps clean
+	@$(MAKE) -C $(THIRDPARTY_C_DIR) clean
 # <<<< DEV ONLY
 	@$(MAKE) -C docs clean
 	@echo "Removing dependencies managed by crepo"

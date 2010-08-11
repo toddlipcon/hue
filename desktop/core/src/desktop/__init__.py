@@ -16,5 +16,9 @@
 # limitations under the License.
 from desktop.supervisor import DjangoCommandSupervisee
 
-SUPERVISOR_SPEC = DjangoCommandSupervisee(
+SUPERVISOR_CP_SERVER_SPEC = DjangoCommandSupervisee(
   "runcpserver", drop_root=False)
+SUPERVISOR_LP_SERVER_SPEC = DjangoCommandSupervisee(
+  "runlpserver")
+SUPERVISOR_NGINX_SPEC = DjangoCommandSupervisee(
+  "nginx")

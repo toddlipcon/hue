@@ -26,6 +26,8 @@ setup(
 
       entry_points = { 'console_scripts': [ 'supervisor = desktop.supervisor:main',
                                             'hue = desktop.manage_entry:entry', ],
-                       'desktop.supervisor.specs': [ 'runcpserver = desktop:SUPERVISOR_SPEC' ]
+                       'desktop.supervisor.specs': [ 'runcpserver = desktop:SUPERVISOR_CP_SERVER_SPEC',
+                                                     'runlpserver = desktop:SUPERVISOR_LP_SERVER_SPEC',
+                                                     'nginx = desktop:SUPERVISOR_NGINX_SPEC']
                        },
       )

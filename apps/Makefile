@@ -37,7 +37,8 @@ APPS := about \
 	jobbrowser \
 	jobsub \
 	proxy \
-	useradmin
+	useradmin \
+	shell
 
 # <<<< DEV ONLY
 APPS += hello \

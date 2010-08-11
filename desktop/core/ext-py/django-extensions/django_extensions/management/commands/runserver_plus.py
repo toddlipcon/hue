@@ -38,7 +38,7 @@ class Command(BaseCommand):
             raise CommandError('Usage is runserver %s' % self.args)
         if not addrport:
             addr = ''
-            port = '8000'
+            port = '7999'
         else:
             try:
                 addr, port = addrport.split(':')
@@ -70,6 +70,6 @@ class Command(BaseCommand):
                 import webbrowser
                 url = "http://%s:%s/" % (addr, port)
                 webbrowser.open(url)
-            run_simple(addr, int(port), DebuggedApplication(handler, True), 
-                       use_reloader=use_reloader, use_debugger=True)            
+            run_simple(addr, int(port), DebuggedApplication(handler, True),
+                       use_reloader=use_reloader, use_debugger=True)
         inner_run()
