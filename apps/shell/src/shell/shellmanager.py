@@ -57,6 +57,7 @@ class Shell(object):
     LOG.debug("Subprocess environment is %s" % (subprocess_env,))
     p = subprocess.Popen(shell_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                            shell=True, stderr=subprocess.STDOUT, env=subprocess_env, close_fds=True)
+
     ifd = p.stdin.fileno()
     ofd = p.stdout.fileno()
 
@@ -68,10 +69,6 @@ class Shell(object):
     fd_attr = fcntl.fcntl(ifd, fcntl.F_GETFL)
     fcntl.fcntl(ifd, fcntl.F_SETFL, fd_attr | os.O_NONBLOCK)
 
-    io_loop = tornado.ioloop.IOLoop.instance()
-    io_loop.add_handler(ofd, self._child_readable, io_loop.READ)
-    io_loop.add_handler(ifd, self._child_writable, io_loop.WRITE)
-
     # State that isn't touched by any other classes.
     self._ifd = ifd
     self._ofd = ofd
@@ -80,8 +77,10 @@ class Shell(object):
     self._read_buffer = cStringIO.StringIO()
     self._prompt_connections = []
     self._output_connections = []
-    self._io_loop = io_loop
+    self._io_loop = tornado.ioloop.IOLoop.instance()
     self._output_chunk_info = []
+    self._write_callback_enabled = False
+    self._read_callback_enabled = False
 
     # State that's accessed by other classes.
     self.last_output_sent = False # Set to true when shell exits and last output has been sent
@@ -112,6 +111,9 @@ class Shell(object):
     else:
       LOG.debug("Write buffer has room. Adding command to end of write buffer.")
       self._append_to_write_buffer(command)
+      if not self._write_callback_enabled:
+        self._io_loop.add_handler(self._ifd, self._child_writable, self._io_loop.WRITE)
+        self._write_callback_enabled = True
       self._prompt_connections.append(connection)
 
   def mark_for_cleanup(self):
@@ -148,6 +150,9 @@ class Shell(object):
     if chunk_id < len(self._output_chunk_info):
       self._write_output_from_cache(chunk_id, connection)
     else:
+      if not self._read_callback_enabled:
+        self._io_loop.add_handler(self._ofd, self._child_readable, self._io_loop.READ)
+        self._read_callback_enabled = True
       self._output_connections.append(TimestampedConnection(connection))
 
   def handle_periodic(self):
@@ -179,8 +184,12 @@ class Shell(object):
     Called during iterations of _handle_periodic in the global IOLoop. Removes the appropriate
     handlers from the IOLoop, and then kills the subprocess.
     """
-    self._io_loop.remove_handler(self._ofd)
-    self._io_loop.remove_handler(self._ifd)
+    if self._read_callback_enabled:
+      self._io_loop.remove_handler(self._ofd)
+      self._read_callback_enabled = False
+    if self._write_callback_enabled:
+      self._io_loop.remove_handler(self._ifd)
+      self._write_callback_enabled = False
 
     self._write_buffer.close()
     self._read_buffer.close()
@@ -240,6 +249,7 @@ class Shell(object):
     Called by the IOLoop when the child process's output fd has data that can be read. The data is
     read out and then written back over the output connection for that client.
     """
+    LOG.debug("child_readable")
     if not len(self._output_connections):
       return
 
@@ -252,14 +262,18 @@ class Shell(object):
       status = constants.EXITED
       self.last_output_sent = True
 
-    while len(self._output_connections):
-      output_connection = self._output_connections.pop().handler
-      try:
-        output_connection.write({ status: True, constants.OUTPUT: total_output,
-           constants.MORE_OUTPUT_AVAILABLE: more_available, constants.NEXT_CHUNK_ID: next_chunk_id})
-        output_connection.finish()
-      except IOError:
-        pass
+    try:
+      while len(self._output_connections):
+        output_connection = self._output_connections.pop().handler
+        try:
+          output_connection.write({ status: True, constants.OUTPUT: total_output,
+             constants.MORE_OUTPUT_AVAILABLE: more_available, constants.NEXT_CHUNK_ID: next_chunk_id})
+          output_connection.finish()
+        except IOError:
+          pass
+    finally:
+      self._io_loop.remove_handler(self._ofd)
+      self._read_callback_enabled = False
 
   def _append_to_write_buffer(self, command):
     """
@@ -296,6 +310,7 @@ class Shell(object):
     Called by the global IOLoop instance when a child subprocess's input file descriptor becomes available for writing.
     This is the point at which we send the OK back to the client so that the prompt can become available in the browser window.
     """
+    LOG.debug("child_writable")
     buffer_contents = self._read_from_write_buffer()
     if buffer_contents != "":
       try:
@@ -312,6 +327,8 @@ class Shell(object):
       else:
         return
 
+    self._io_loop.remove_handler(self._ifd)
+    self._write_callback_enabled = False
     # We have prompt connections to acknowledge that we can receive more stuff. Let's do that.
     while len(self._prompt_connections):
       prompt_connection = self._prompt_connections.pop()
@@ -368,7 +385,8 @@ class ShellManager(object):
     self._shells = {} # The keys are (username, shell_id) tuples
     self._meta = {} # The keys here are usernames
     self._io_loop = tornado.ioloop.IOLoop.instance()
-    self._io_loop.add_callback(self._handle_periodic)
+    self._periodic_callback = tornado.ioloop.PeriodicCallback(self._handle_periodic, 1000)
+    self._periodic_callback.start()
 
   @classmethod
   def global_instance(cls):
@@ -396,6 +414,7 @@ class ShellManager(object):
     Called at every IOLoop iteration. Kills the necessary shells and responds to the outstanding
     requests which will soon time out with "keep-alive" type messages.
     """
+    LOG.debug("Entering _handle_periodic")
     try:
       keys_to_pop = []
       current_time = time.time()
@@ -411,7 +430,7 @@ class ShellManager(object):
       for key in keys_to_pop:
         self._cleanup_shell(key)
     finally:
-      self._io_loop.add_callback(self._handle_periodic)
+      LOG.debug("Leaving _handle_periodic")
 
   def try_create(self, username, connection):
     """

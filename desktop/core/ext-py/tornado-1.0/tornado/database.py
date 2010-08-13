@@ -17,13 +17,11 @@
 """A lightweight wrapper around MySQLdb."""
 
 import copy
-import MySQLdb
 import MySQLdb.constants
 import MySQLdb.converters
 import MySQLdb.cursors
 import itertools
 import logging
-
 
 class Connection(object):
     """A lightweight wrapper around MySQLdb DB-API connections.
@@ -79,7 +77,7 @@ class Connection(object):
 
     def close(self):
         """Closes this database connection."""
-        if self._db is not None:
+        if getattr(self, "_db", None) is not None:
             self._db.close()
             self._db = None
 
@@ -98,10 +96,8 @@ class Connection(object):
             column_names = [d[0] for d in cursor.description]
             for row in cursor:
                 yield Row(zip(column_names, row))
-        except: #Bare exceptions are poor style, but this is to backport it to Python 2.4
+        finally:
             cursor.close()
-            raise
-        cursor.close()
 
     def query(self, query, *parameters):
         """Returns a row list for the given query and parameters."""
@@ -170,15 +166,14 @@ class Row(dict):
 FIELD_TYPE = MySQLdb.constants.FIELD_TYPE
 FLAG = MySQLdb.constants.FLAG
 CONVERSIONS = copy.deepcopy(MySQLdb.converters.conversions)
+
+field_types = [FIELD_TYPE.BLOB, FIELD_TYPE.STRING, FIELD_TYPE.VAR_STRING]
 if 'VARCHAR' in vars(FIELD_TYPE):
-    suffix = [FIELD_TYPE.VARCHAR]
-else:
-    suffix = []
-for field_type in \
-        [FIELD_TYPE.BLOB, FIELD_TYPE.STRING, FIELD_TYPE.VAR_STRING] + \
-        (suffix):
+    field_types.append(FIELD_TYPE.VARCHAR)
+
+for field_type in field_types:
     CONVERSIONS[field_type].insert(0, (FLAG.BINARY, str))
-del suffix
+
 
 # Alias some common MySQL exceptions
 IntegrityError = MySQLdb.IntegrityError

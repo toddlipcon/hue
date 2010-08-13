@@ -16,6 +16,12 @@
 
 import distutils.core
 import sys
+# Importing setuptools adds some features like "setup.py develop", but
+# it's optional so swallow the error if it's not there.
+try:
+    import setuptools
+except ImportError:
+    pass
 
 # Build the epoll extension for Linux systems with Python < 2.6
 extensions = []
@@ -27,7 +33,7 @@ if "linux" in sys.platform.lower() and not python_26:
 
 distutils.core.setup(
     name="tornado",
-    version="0.2",
+    version="1.0",
     packages = ["tornado"],
     ext_modules = extensions,
     author="Facebook",

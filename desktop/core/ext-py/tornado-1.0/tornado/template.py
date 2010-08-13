@@ -79,6 +79,8 @@ We provide the functions escape(), url_escape(), json_encode(), and squeeze()
 to all templates by default.
 """
 
+from __future__ import with_statement
+
 import cStringIO
 import datetime
 import escape
@@ -166,7 +168,10 @@ class Loader(object):
         self.root = os.path.abspath(root_directory)
         self.templates = {}
 
-    def load(self, name, parent_path=None):
+    def reset(self):
+      self.templates = {}
+
+    def resolve_path(self, name, parent_path=None):
         if parent_path and not parent_path.startswith("<") and \
            not parent_path.startswith("/") and \
            not name.startswith("/"):
@@ -175,6 +180,10 @@ class Loader(object):
             relative_path = os.path.abspath(os.path.join(file_dir, name))
             if relative_path.startswith(self.root):
                 name = relative_path[len(self.root) + 1:]
+        return name
+
+    def load(self, name, parent_path=None):
+        name = self.resolve_path(name, parent_path=parent_path)
         if name not in self.templates:
             path = os.path.join(self.root, name)
             f = open(path, "r")
@@ -201,16 +210,10 @@ class _File(_Node):
 
     def generate(self, writer):
         writer.write_line("def _execute():")
-        context_guard = writer.indent()
-        context_guard.__enter__()
-        try:
+        with writer.indent():
             writer.write_line("_buffer = []")
             self.body.generate(writer)
             writer.write_line("return ''.join(_buffer)")
-        finally:
-            context_guard.__exit__() #This works for now, since the __exit__ method doesn't try to 
-                                     #handle exceptions. But if it did, we'd have to come up with some way
-                                     #of passing the exception through. So marking this as a TODO.
 
     def each_child(self):
         return (self.body,)
@@ -279,14 +282,10 @@ class _ApplyBlock(_Node):
         method_name = "apply%d" % writer.apply_counter
         writer.apply_counter += 1
         writer.write_line("def %s():" % method_name)
-        context_guard = writer.indent()
-        context_guard.__enter__()
-        try:
+        with writer.indent():
             writer.write_line("_buffer = []")
             self.body.generate(writer)
             writer.write_line("return ''.join(_buffer)")
-        finally:
-            context_guard.__exit__() #TODO: See above
         writer.write_line("_buffer.append(%s(%s()))" % (
             self.method, method_name))
 
@@ -301,12 +300,8 @@ class _ControlBlock(_Node):
 
     def generate(self, writer):
         writer.write_line("%s:" % self.statement)
-        context_guard = writer.indent()
-        context_guard.__enter__()
-        try:
+        with writer.indent():
             self.body.generate(writer)
-        finally:
-            context_guard.__exit__() #TODO: See above
 
 
 class _IntermediateControlBlock(_Node):
@@ -469,6 +464,13 @@ def _parse(reader, in_block=None):
             # If the first curly brace is not the start of a special token,
             # start searching from the character after it
             if reader[curly + 1] not in ("{", "%"):
+                curly += 1
+                continue
+            # When there are more than 2 curlies in a row, use the
+            # innermost ones.  This is useful when generating languages
+            # like latex where curlies are also meaningful
+            if (curly + 2 < reader.remaining() and
+                reader[curly + 1] == '{' and reader[curly + 2] == '{'):
                 curly += 1
                 continue
             break
