@@ -25,5 +25,5 @@ SHELL_SERVER_PORT = Config(
 SHELL_TYPE = Config(
   key="shell_type",
   help="Configure the type of shell that the Hue app runs",
-  default = "hbase shell") # pig -l /dev/null , flume shell , hbase shell, zkCli.sh
+  default = "pig -l /dev/null") # pig -l /dev/null , flume shell , hbase shell, zkCli.sh
 

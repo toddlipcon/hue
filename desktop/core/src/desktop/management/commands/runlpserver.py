@@ -26,6 +26,13 @@ import logging
 
 LOG = logging.getLogger(__name__)
 
+try:
+  unused = BaseException
+except NameError:
+  BaseException = Exception
+else:
+  del unused
+
 class Command(NoArgsCommand):
   """Starts the Tornado server."""
   def handle_noargs(self, **options):
@@ -40,5 +47,6 @@ class Command(NoArgsCommand):
     try:
       io_loop.start()
     except BaseException, exc:
-      LOG.error("Stopping long-polling server due to error : '%s'" % (exc,))
+      LOG.debug("Stopping long-polling server...")
       io_loop.stop()
+      LOG.debug("Done")

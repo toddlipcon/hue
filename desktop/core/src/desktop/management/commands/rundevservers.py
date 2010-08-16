@@ -26,6 +26,13 @@ import signal
 
 LOG = logging.getLogger(__name__)
 
+try:
+  unused = BaseException
+except NameError:
+  BaseException = Exception
+else:
+  del unused
+
 class Command(NoArgsCommand):
   """
   Run tornado, runserver_plus, and nginx on the ports specified in desktop.conf
