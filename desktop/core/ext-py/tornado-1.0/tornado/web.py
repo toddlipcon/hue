@@ -49,13 +49,24 @@ import calendar
 import Cookie
 import cStringIO
 import datetime
-import email.utils
+try:
+    import email.utils
+except ImportError:
+    import email
+    import email.Utils
+    email.utils = email.Utils
 import escape
-import functools
+try:
+    import functools
+except ImportError:
+    import custom_functools as functools
 import gzip
-import hashlib
+try:
+    import hashlib
+except ImportError:
+    import custom_hashlib as hashlib
 import hmac
-import httplib
+from custom_httplib import httplib
 import locale
 import logging
 import mimetypes
@@ -68,7 +79,10 @@ import time
 import types
 import urllib
 import urlparse
-import uuid
+try:
+    import uuid
+except ImportError:
+    import custom_uuid as uuid
 
 class RequestHandler(object):
     """Subclass this class and define get() or post() to make a handler.
@@ -329,7 +343,12 @@ class RequestHandler(object):
         """Sends a redirect to the given (optionally relative) URL."""
         if self._headers_written:
             raise Exception("Cannot redirect after headers have been written")
-        self.set_status(301 if permanent else 302)
+        if permanent:
+            status = 301
+        else:
+            status = 302
+        self.set_status(status)
+        del status
         # Remove whitespace
         url = re.sub(r"[\x00-\x20]+", "", _utf8(url))
         self.set_header("Location", urlparse.urljoin(self.request.uri, url))
@@ -651,7 +670,10 @@ class RequestHandler(object):
             token = self.get_cookie("_xsrf")
             if not token:
                 token = binascii.b2a_hex(uuid.uuid4().bytes)
-                expires_days = 30 if self.current_user else None
+                if self.current_user:
+                    expires_days = 30
+                else:
+                    expires_days = None
                 self.set_cookie("_xsrf", token, expires_days=expires_days)
             self._xsrf_token = token
         return self._xsrf_token
@@ -717,8 +739,10 @@ class RequestHandler(object):
             except:
                 logging.error("Could not open static file %r", path)
                 hashes[path] = None
-        base = self.request.protocol + "://" + self.request.host \
-            if getattr(self, "include_host", False) else ""
+        if getattr(self, "include_host", False):
+            base = self.request.protocol + "://" + self.request.host
+        else:
+            base = ""
         static_url_prefix = self.settings.get('static_url_prefix', '/static/')
         if hashes.get(path):
             return base + static_url_prefix + path + "?v=" + hashes[path][:5]

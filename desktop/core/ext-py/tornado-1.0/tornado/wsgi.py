@@ -53,7 +53,7 @@ details and documentation.
 import cgi
 import cStringIO
 import escape
-import httplib
+from custom_httplib import httplib
 import httputil
 import logging
 import sys
@@ -256,7 +256,10 @@ class WSGIContainer(object):
             port = int(hostport[1])
         else:
             host = request.host
-            port = 443 if request.protocol == "https" else 80
+            if request.protocol == "https":
+                port = 443
+            else:
+                port = 80
         environ = {
             "REQUEST_METHOD": request.method,
             "SCRIPT_NAME": "",

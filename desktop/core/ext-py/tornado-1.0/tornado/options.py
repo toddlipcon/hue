@@ -193,7 +193,10 @@ class _Option(object):
         self._value = None
 
     def value(self):
-        return self.default if self._value is None else self._value
+        if self._value is None:
+            return self.default
+        else:
+            return self._value
 
     def parse(self, value):
         _parse = {
@@ -210,7 +213,10 @@ class _Option(object):
                     # allow ranges of the form X:Y (inclusive at both ends)
                     lo, _, hi = part.partition(":")
                     lo = _parse(lo)
-                    hi = _parse(hi) if hi else lo
+                    if hi:
+                        hi = _parse(hi)
+                    else:
+                        hi = lo
                     self._value.extend(range(lo, hi+1))
                 else:
                     self._value.append(_parse(part))

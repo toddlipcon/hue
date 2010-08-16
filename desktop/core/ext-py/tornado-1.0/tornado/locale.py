@@ -279,18 +279,26 @@ class Locale(object):
                 format = _("%(time)s")
             elif days == 1 and local_date.day == local_yesterday.day and \
                  relative:
-                format = _("yesterday") if shorter else \
-                         _("yesterday at %(time)s")
+                if shorter:
+                    format = _("yesterday")
+                else:
+                    format = _("yesterday at %(time)s")
             elif days < 5:
-                format = _("%(weekday)s") if shorter else \
-                         _("%(weekday)s at %(time)s")
+                if shorter:
+                    format = _("%(weekday)s")
+                else:
+                    format = _("%(weekday)s at %(time)s")
             elif days < 334:  # 11mo, since confusing for same month last year
-                format = _("%(month_name)s %(day)s") if shorter else \
-                         _("%(month_name)s %(day)s at %(time)s")
+                if shorter:
+                    format = _("%(month_name)s %(day)s")
+                else:
+                    format = _("%(month_name)s %(day)s at %(time)s")
 
         if format is None:
-            format = _("%(month_name)s %(day)s, %(year)s") if shorter else \
-                     _("%(month_name)s %(day)s, %(year)s at %(time)s")
+            if shorter:
+                format = _("%(month_name)s %(day)s, %(year)s")
+            else:
+                format = _("%(month_name)s %(day)s, %(year)s at %(time)s")
 
         tfhour_clock = self.code not in ("en", "en_US", "zh_CN")
         if tfhour_clock:
@@ -341,7 +349,10 @@ class Locale(object):
         _ = self.translate
         if len(parts) == 0: return ""
         if len(parts) == 1: return parts[0]
-        comma = u' \u0648 ' if self.code.startswith("fa") else u", "
+        if self.code.startswith("fa"):
+            comma = u' \u0648 '
+        else:
+            comma = u", "
         return _("%(commas)s and %(last)s") % {
             "commas": comma.join(parts[:-1]),
             "last": parts[len(parts) - 1],

@@ -79,8 +79,6 @@ We provide the functions escape(), url_escape(), json_encode(), and squeeze()
 to all templates by default.
 """
 
-from __future__ import with_statement
-
 import cStringIO
 import datetime
 import escape
@@ -210,11 +208,16 @@ class _File(_Node):
 
     def generate(self, writer):
         writer.write_line("def _execute():")
-        with writer.indent():
+        context_guard = writer.indent()
+        context_guard.__enter__()
+        try:
             writer.write_line("_buffer = []")
             self.body.generate(writer)
             writer.write_line("return ''.join(_buffer)")
-
+        finally:
+            context_guard.__exit__() # This works for now, since the __exit__ method doesn't try to
+                                     # handle exceptions. But if it did, we'd have to come up with some way
+                                     # of passing the exception through. So marking this as a TODO.
     def each_child(self):
         return (self.body,)
 
@@ -282,10 +285,14 @@ class _ApplyBlock(_Node):
         method_name = "apply%d" % writer.apply_counter
         writer.apply_counter += 1
         writer.write_line("def %s():" % method_name)
-        with writer.indent():
+        context_guard = writer.indent()
+        context_guard.__enter__()
+        try:
             writer.write_line("_buffer = []")
             self.body.generate(writer)
             writer.write_line("return ''.join(_buffer)")
+        finally:
+            context_guard.__exit__() # TODO: See above
         writer.write_line("_buffer.append(%s(%s()))" % (
             self.method, method_name))
 
@@ -300,8 +307,12 @@ class _ControlBlock(_Node):
 
     def generate(self, writer):
         writer.write_line("%s:" % self.statement)
-        with writer.indent():
+        context_guard = writer.indent()
+        context_guard.__enter__()
+        try:
             self.body.generate(writer)
+        finally:
+            context_guard.__exit__() # TODO: See above
 
 
 class _IntermediateControlBlock(_Node):

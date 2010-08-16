@@ -47,7 +47,6 @@ class GoogleHandler(tornado.web.RequestHandler, tornado.auth.GoogleMixin):
 
 import binascii
 import cgi
-import hashlib
 import hmac
 import httpclient
 import escape
@@ -55,7 +54,15 @@ import logging
 import time
 import urllib
 import urlparse
-import uuid
+try:
+    import hashlib
+except ImportError:
+    import custom_hashlib as hashlib
+try:
+    import uuid
+except ImportError:
+    import custom_uuid as uuid
+
 
 class OpenIdMixin(object):
     """Abstract implementation of OpenID and Attribute Exchange.
@@ -424,7 +431,10 @@ class TwitterMixin(OAuthMixin):
             all_args.update(args)
             all_args.update(post_args or {})
             consumer_token = self._oauth_consumer_token()
-            method = "POST" if post_args is not None else "GET"
+            if post_args is not None:
+                method = "POST"
+            else:
+                method = "GET"
             oauth = self._oauth_request_parameters(
                 url, access_token, all_args, method=method)
             args.update(oauth)
@@ -544,7 +554,10 @@ class FriendFeedMixin(OAuthMixin):
             all_args.update(args)
             all_args.update(post_args or {})
             consumer_token = self._oauth_consumer_token()
-            method = "POST" if post_args is not None else "GET"
+            if post_args is not None:
+                method = "POST"
+            else:
+                method = "GET"
             oauth = self._oauth_request_parameters(
                 url, access_token, all_args, method=method)
             args.update(oauth)
@@ -857,7 +870,12 @@ def _oauth_signature(consumer_token, method, url, parameters={}, token=None):
     base_string =  "&".join(_oauth_escape(e) for e in base_elems)
 
     key_elems = [consumer_token["secret"]]
-    key_elems.append(token["secret"] if token else "")
+    if token:
+        item_to_append = token["secret"]
+    else:
+        item_to_append = ""
+    key_elems.append(item_to_append)
+    del item_to_append
     key = "&".join(key_elems)
 
     hash = hmac.new(key, base_string, hashlib.sha1)

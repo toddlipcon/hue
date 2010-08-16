@@ -19,10 +19,15 @@
 import calendar
 import collections
 import cStringIO
-import email.utils
+try:
+    import email.utils
+except ImportError:
+    import email
+    import email.Utils
+    email.utils = email.Utils
 import errno
 import escape
-import httplib
+from custom_httplib import httplib
 import httputil
 import ioloop
 import logging

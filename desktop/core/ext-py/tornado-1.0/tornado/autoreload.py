@@ -20,7 +20,10 @@ This module depends on IOLoop, so it will not work in WSGI applications
 and Google AppEngine.
 """
 
-import functools
+try:
+    import functools
+except ImportError:
+    import custom_functools as functools
 import ioloop
 import logging
 import os

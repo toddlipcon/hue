@@ -34,7 +34,10 @@ S3 client with this module:
 import bisect
 import datetime
 import escape
-import hashlib
+try:
+    import hashlib
+except ImportError:
+    import custom_hashlib as hashlib
 import httpserver
 import ioloop
 import os

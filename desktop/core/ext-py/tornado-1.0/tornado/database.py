@@ -96,8 +96,10 @@ class Connection(object):
             column_names = [d[0] for d in cursor.description]
             for row in cursor:
                 yield Row(zip(column_names, row))
-        finally:
+        except: # Bare exceptions are poor style, but this is to backport it to Python 2.4
             cursor.close()
+            raise
+        cursor.close()
 
     def query(self, query, *parameters):
         """Returns a row list for the given query and parameters."""
