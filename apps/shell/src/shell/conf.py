@@ -22,8 +22,41 @@ SHELL_SERVER_PORT = Config(
   default=7998,
   type=int)
 
-SHELL_TYPE = Config(
-  key="shell_type",
-  help="Configure the type of shell that the Hue app runs",
-  default = "pig -l /dev/null") # pig -l /dev/null , flume shell , hbase shell, zkCli.sh
+# A Template for how to add things to this config file.
+#
+# SHELL_<NAME HERE> = Config( # Pick some meaningful name for the shell type
+#   key = "shell_<name here>" # The variable name in lowercase
+#   help = "<name here> Shell" # A user-friendly version of this shell name
+#   default = "<shell command here>" # The command to be run to start the shell (bc, bash, irb, etc.)
+# )
+# Then you should add the all-caps variable name to the comma-separated default value for SHELL_TYPES.
 
+SHELL_PIG = Config(
+  key="shell_pig",
+  help="Pig Shell (Grunt)",
+  default="pig -l /dev/null"
+)
+
+SHELL_HBASE = Config(
+  key="shell_hbase",
+  help="HBase Shell",
+  default="hbase shell"
+)
+
+SHELL_FLUME = Config(
+  key="shell_flume",
+  help="Flume Shell",
+  default="flume shell"
+)
+
+SHELL_ZOOKEEPER = Config(
+  key="shell_zookeeper",
+  help="Zookeper Shell",
+  default="zkCli.sh"
+)
+
+SHELL_TYPES = Config(
+  key="shell_types",
+  help="Comma-separated list of variable names to read from this module.",
+  default="SHELL_PIG, SHELL_HBASE, SHELL_FLUME, SHELL_ZOOKEEPER"
+)

@@ -27,6 +27,9 @@ OUTPUT = "output"
 SUCCESS = "success"
 SHELL_ID = "shellId"
 COMMAND = "lineToSend"
+KEY_NAME = "keyName"
+NICE_NAME = "niceName"
+SHELL_TYPES = "shellTypes"
 SHELL_KILLED = "shellKilled"
 NEXT_CHUNK_ID = "nextChunkId"
 NOT_LOGGED_IN = "notLoggedIn"
@@ -39,7 +42,8 @@ MORE_OUTPUT_AVAILABLE = "moreOutputAvailable"
 
 # Required environment variables
 PRESERVED_ENVIRONMENT_VARIABLES = ["JAVA_HOME", "HADOOP_HOME", "PATH", "HOME", "LC_ALL", "LANG",
-              "LC_COLLATE", "LC_CTYPE", "LC_MESSAGES", "LC_MONETARY", "LC_NUMERIC", "LC_TIME", "TZ"]
+              "LC_COLLATE", "LC_CTYPE", "LC_MESSAGES", "LC_MONETARY", "LC_NUMERIC", "LC_TIME", "TZ",
+              "FLUME_CONF_DIR"]
 
 # Internal constants
 BROWSER_REQUEST_TIMEOUT = 55

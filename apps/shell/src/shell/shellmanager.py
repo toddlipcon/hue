@@ -432,24 +432,40 @@ class ShellManager(object):
     finally:
       LOG.debug("Leaving _handle_periodic")
 
-  def try_create(self, username, connection):
+  def _get_command_from_key(self, key_name):
+    """
+    Attempts to determine the command to run from the key_name passed in. For example, 
+    "flume_shell" becomes "flume shell" and "pig_shell" becomes "pig -l /dev/null".
+    """
+    key_name = str(key_name)
+    command = None
+    try:
+      command = getattr(shell.conf, key_name.upper()) # The short-circuit
+      command = command.get()
+    except AttributeError:
+      shell_types = shell.conf.SHELL_TYPES.get() # If it fails, look through all of SHELL_TYPES
+      shell_types = shell_types.split(",")
+      shell_types = [getattr(shell.conf, item.strip()) for item in shell_types]
+      for item in shell_types:
+        if item.config.key == key_name:
+          command = item.config.default
+          break
+    return command
+  
+  def try_create(self, username, key_name, connection):
     """
     Attemps to create a new shell subprocess for the given user. Writes the appropriate failure or
     success response to the client.
     """
-    if not username in self._meta:
-      self._meta[username] = UserMetadata(username)
-    user_metadata = self._meta[username]
-    if user_metadata.get_shell_count() >= constants.MAX_SHELLS:
-      try:
-        connection.write({ constants.SHELL_LIMIT_REACHED : True })
-      except IOError:
-        pass
+    command = self._get_command_from_key(key_name)
+    if command is None:
+      connection.write({ constants.SHELL_CREATE_FAILED : True })
       return
-
+    
+    user_metadata = self._meta[username] 
     try:
       LOG.debug("Trying to create a shell for user %s" % (username,))
-      shell_instance = Shell(shell.conf.SHELL_TYPE.get())
+      shell_instance = Shell(command)
     except (OSError, ValueError), exc:
       LOG.error("Could not create shell : %s" % (exc,))
       try:
@@ -507,6 +523,36 @@ class ShellManager(object):
       LOG.debug("User %s' has no shell with ID '%s'" % (username, shell_id))
       return
     shell.mark_for_cleanup()
+
+  def get_shell_types(self):
+    """
+    Returns a list of the shell types available. Each shell type available is a dictionary with keys
+    constants.NICE_NAME and constants.KEY_NAME
+    """
+    if not hasattr(self, "_cached_shell_types"):
+      shell_types = shell.conf.SHELL_TYPES.get()
+      shell_types = shell_types.split(",")
+      shell_types = [getattr(shell.conf, item.strip()) for item in shell_types]
+      shell_types = [{constants.NICE_NAME: item.config.help, 
+                      constants.KEY_NAME: item.config.key} for item in shell_types]
+      self._cached_shell_types = shell_types
+    return self._cached_shell_types
+
+  def handle_shell_types_request(self, username, connection):
+    """
+    Responds with the shell types available, if the user is allowed to have any more shells open.
+    Otherwise responds with 'No more shells' message.
+    """
+    if not username in self._meta:
+      self._meta[username] = UserMetadata(username)
+    user_metadata = self._meta[username]
+    if user_metadata.get_shell_count() >= constants.MAX_SHELLS:
+      try:
+        connection.write({ constants.SHELL_LIMIT_REACHED : True })
+      except IOError:
+        pass
+      return
+    connection.write({ constants.SUCCESS: True, constants.SHELL_TYPES: self.get_shell_types() })
 
   def get_previous_output(self, username, shell_id):
     """

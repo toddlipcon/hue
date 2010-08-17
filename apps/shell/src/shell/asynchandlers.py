@@ -23,6 +23,20 @@ import shell.middleware
 import shell.shellmanager as shellmanager
 import tornado
 
+class GetShellTypesHandler(shell.middleware.MiddlewareHandler):
+  """
+  Returns a JS object enumerating the types of shells available on the server.
+  """
+  def get(self):
+    if self.deny_hue_access:
+      try:
+        self.write({constants.NOT_LOGGED_IN: True})
+      except IOError:
+        pass
+      return
+    username = self.django_style_request.user.username
+    shellmanager.ShellManager.global_instance().handle_shell_types_request(username, self)
+
 class KillShellHandler(shell.middleware.MiddlewareHandler):
   """
   Tells the shell manager to kill the subprocess for this shell.
@@ -55,7 +69,8 @@ class CreateHandler(shell.middleware.MiddlewareHandler):
         pass
       return
     smanager = shellmanager.ShellManager.global_instance()
-    smanager.try_create(self.django_style_request.user.username, self)
+    key_name = self.get_argument(constants.KEY_NAME, "")
+    smanager.try_create(self.django_style_request.user.username, key_name, self)
 
 class ProcessCommandHandler(shell.middleware.MiddlewareHandler):
   """
