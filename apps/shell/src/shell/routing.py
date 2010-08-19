@@ -61,6 +61,12 @@ def get_shell_types(request):
   """
   raise Http404()
 
+def add_to_output(request):
+  """
+  A dummy for /shell/add_to_output.
+  """
+  raise Http404()
+
 # This urlpatterns is totally fake: we use it to be able to use our standard
 # django middleware on long-polling requests. For each URL in webapp_params,
 # we should have the same URL (with an extra ^ prefixed) in urlpatterns, and
@@ -73,6 +79,7 @@ urlpatterns = patterns('',
   url(r'^/?shell/kill_shell/?$', kill_shell),
   url(r'^/?shell/restore_shell/?$', restore_shell),
   url(r'^/?shell/get_shell_types/?$', get_shell_types),
+  url(r'^/?shell/add_to_output/?$', add_to_output),
 )
 
 # This is used by the tornado server to figure out which handler should process
@@ -85,4 +92,5 @@ webapp_params = [
   (r'/shell/kill_shell/?$', asynchandlers.KillShellHandler),
   (r'/shell/restore_shell/?$', asynchandlers.RestoreShellHandler),
   (r'/shell/get_shell_types/?$', asynchandlers.GetShellTypesHandler),
+  (r'/shell/add_to_output/?$', asynchandlers.AddToOutputHandler),
 ]

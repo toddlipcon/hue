@@ -25,10 +25,25 @@ script: CCS.js
 */
 var CCS = new Events();
 /* config */
+var hueInstanceID = function(){
+    var chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXTZabcdefghiklmnopqrstuvwxyz";
+    var lastIndex = chars.length - 1;
+    var stringLength = 128;
+	var randomString = "";
+	for (var i = 0; i < stringLength; i++){
+	    var randomIndex = $random(0, lastIndex);
+	    randomString += chars.substring(randomIndex, randomIndex+1);
+	}
+	return randomString;
+}();
+
 Request.implement({
 	options: {
 		evalScripts: true,
-		noCache: true
+		noCache: true,
+		headers: {
+		    "Hue-Instance-ID" : hueInstanceID
+		}
 	}
 });
 Spinner.implement({

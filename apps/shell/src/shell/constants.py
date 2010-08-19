@@ -39,6 +39,10 @@ PERIODIC_RESPONSE = "periodicResponse"
 SHELL_LIMIT_REACHED = "shellLimitReached"
 SHELL_CREATE_FAILED = "shellCreateFailed"
 MORE_OUTPUT_AVAILABLE = "moreOutputAvailable"
+SERIALIZED_SHELL_INFO = "serializedShellInfo"
+
+# HTTP Headers used
+HUE_INSTANCE_ID = "Hue-Instance-ID"
 
 # Required environment variables
 PRESERVED_ENVIRONMENT_VARIABLES = ["JAVA_HOME", "HADOOP_HOME", "PATH", "HOME", "LC_ALL", "LANG",

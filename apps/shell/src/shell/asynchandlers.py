@@ -22,6 +22,36 @@ import shell.constants as constants
 import shell.middleware
 import shell.shellmanager as shellmanager
 import tornado
+import logging
+
+LOG = logging.getLogger(__name__)
+
+class AddToOutputHandler(shell.middleware.MiddlewareHandler):
+  """
+  Adds the shell_id passed in to the shared output connection for the given Hue client.
+  """
+  def post(self):
+    if self.deny_hue_access:
+      try:
+        self.write({ constants.NOT_LOGGED_IN: True })
+      except IOError:
+        pass
+      return
+    username = self.django_style_request.user.username
+    shell_id = self.get_argument(constants.SHELL_ID, "")
+    chunk_id = self.get_argument(constants.CHUNK_ID, "")
+    smanager = shellmanager.ShellManager.global_instance()
+    hue_instance_id = self.request.headers.get_list(constants.HUE_INSTANCE_ID)
+    if len(hue_instance_id) != 1:
+      LOG.error("Hue-Instance-ID header was not properly set in request from user %s" % (username,))
+      # TODO: Not sure what to do in this case.
+      try:
+        self.write("")
+      except IOError:
+        pass
+      return
+    hue_instance_id = hue_instance_id[0]
+    smanager.add_to_output(username, shell_id, chunk_id, hue_instance_id, self)
 
 class GetShellTypesHandler(shell.middleware.MiddlewareHandler):
   """
@@ -107,11 +137,20 @@ class RetrieveOutputHandler(shell.middleware.MiddlewareHandler):
         pass
       return
 
-    shell_id = self.get_argument(constants.SHELL_ID, "")
-    next_chunk_id = int(self.get_argument(constants.NEXT_CHUNK_ID))
-    smanager = shellmanager.ShellManager.global_instance()
+    hue_instance_id = self.request.headers.get_list(constants.HUE_INSTANCE_ID)
     username = self.django_style_request.user.username
-    smanager.output_request_received(username, shell_id, next_chunk_id, self)
+    if len(hue_instance_id) != 1:
+      LOG.error("Hue-Instance-ID header was not properly set in request from user %s" % (username,))
+      # TODO: Not sure what to do in this case.
+      try:
+        self.write("")
+        self.finish()
+      except IOError:
+        pass
+      return
+    hue_instance_id = hue_instance_id[0]
+    smanager = shellmanager.ShellManager.global_instance()
+    smanager.output_request_received(username, hue_instance_id, self)
 
 class RestoreShellHandler(shell.middleware.MiddlewareHandler):
   """

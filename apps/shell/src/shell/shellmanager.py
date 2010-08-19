@@ -76,11 +76,12 @@ class Shell(object):
     self._write_buffer = cStringIO.StringIO()
     self._read_buffer = cStringIO.StringIO()
     self._prompt_connections = []
-    self._output_connections = []
+    self._output_connection_ids = set()
     self._io_loop = tornado.ioloop.IOLoop.instance()
     self._output_chunk_info = []
     self._write_callback_enabled = False
     self._read_callback_enabled = False
+    self._smanager = ShellManager.global_instance()
 
     # State that's accessed by other classes.
     self.last_output_sent = False # Set to true when shell exits and last output has been sent
@@ -93,7 +94,6 @@ class Shell(object):
     Called when a Hue session is restored. Returns all previous outputs.
     """
     return ( self._read_buffer.getvalue(), len(self._output_chunk_info) )
-
 
   def command_received(self, command, connection):
     """
@@ -111,20 +111,50 @@ class Shell(object):
     else:
       LOG.debug("Write buffer has room. Adding command to end of write buffer.")
       self._append_to_write_buffer(command)
-      if not self._write_callback_enabled:
-        self._io_loop.add_handler(self._ifd, self._child_writable, self._io_loop.WRITE)
-        self._write_callback_enabled = True
+      self.enable_write_callback()
       self._prompt_connections.append(connection)
 
+  def enable_write_callback(self):
+    """
+    Register a callback with the global IOLoop for when the child becomes writable.
+    """
+    if not self._write_callback_enabled:
+      self._io_loop.add_handler(self._ifd, self._child_writable, self._io_loop.WRITE)
+      self._write_callback_enabled = True
+      
+  def enable_read_callback(self):
+    """
+    Register a callback with the global IOLoop for when the child becomes readable.
+    """
+    if not self._read_callback_enabled:
+      self._io_loop.add_handler(self._ofd, self._child_readable, self._io_loop.READ)
+      self._read_callback_enabled = True
+
+  def disable_read_callback(self):
+    """
+    Unregister the _child_readable callback from the global IOLoop.
+    """
+    if self._read_callback_enabled:
+      self._io_loop.remove_handler(self._ofd)
+      self._read_callback_enabled = False
+  
+  def disable_write_callback(self):
+    """
+    Unregister the _child_writable callback from the global IOLoop.
+    """
+    if self._write_callback_enabled:
+      self._io_loop.remove_handler(self._ifd)
+      self._write_callback_enabled = False
+  
   def mark_for_cleanup(self):
     """
     Mark this shell to be destroyed at the next iteration of the global IOLoop instance.
     """
     self.remove_at_next_iteration = True
 
-  def _write_output_from_cache(self, chunk_id, connection):
+  def get_cached_output(self, chunk_id):
     """
-    The chunk ID is one from the past, so we just fetch the necessary stuff from cache.
+    The chunk ID is one from the past, so we fetch the necessary stuff from cache.
     """
     start_pos = self._output_chunk_info[chunk_id][0]
     end_pos = self._output_chunk_info[-1][1]
@@ -133,63 +163,42 @@ class Shell(object):
     self._read_buffer.seek(start_pos)
     output = self._read_buffer.read(bytes_to_read)
     self._read_buffer.seek(old_pos)
-    try:
-      connection.write({ constants.ALIVE: True, constants.OUTPUT: output,
-      constants.MORE_OUTPUT_AVAILABLE: True, constants.NEXT_CHUNK_ID: len(self._output_chunk_info)})
-      connection.finish()
-    except IOError:
-      pass
+    return output
+  
+  def output_request_received(self, hue_instance_id, chunk_id):
+    """
+    If chunk_id represents an output chunk from the past, returns all cached output since that
+    chunk and the next chunk ID in a dictionary. Otherwise adds listeners and returns None.
+    """
+    if chunk_id >= len(self._output_chunk_info):
+      self.enable_read_callback()
+      self._output_connection_ids.add(hue_instance_id)
+      return None
+    cached_output = self.get_cached_output(chunk_id)
+    return { constants.ALIVE: True, constants.OUTPUT: cached_output,
+    constants.MORE_OUTPUT_AVAILABLE: True, constants.NEXT_CHUNK_ID: len(self._output_chunk_info) }
 
-  def output_request_received(self, chunk_id, connection):
+  def _output_connection_ids_to_list(self):
     """
-    Called when an output request is received from the client. We note the time and stick the
-    connection into the appropriate instance variable.
+    Converts the set of output connection IDs to a list.
     """
-    LOG.debug("Received output request from %s" % (connection.django_style_request.user.username,))
-    self.time_received = time.time()
-    if chunk_id < len(self._output_chunk_info):
-      self._write_output_from_cache(chunk_id, connection)
-    else:
-      if not self._read_callback_enabled:
-        self._io_loop.add_handler(self._ofd, self._child_readable, self._io_loop.READ)
-        self._read_callback_enabled = True
-      self._output_connections.append(TimestampedConnection(connection))
-
-  def handle_periodic(self):
-    """
-    Called every iteration of the global IOLoop by the global ShellManager. This lets us time some
-    old output connections out by writing a "Keep-Alive" equivalent.
-    """
-    i = 0
-    currtime = time.time()
-    while i < len(self._output_connections):
+    retval = []
+    while True:
       try:
-        conn = self._output_connections[i]
-        difftime = currtime - conn.time_received
-        if difftime >= constants.BROWSER_REQUEST_TIMEOUT:
-          try:
-            try:
-              conn.handler.write({ constants.PERIODIC_RESPONSE : True })
-              conn.handler.finish()
-            except IOError:
-              pass
-          finally:
-            self._output_connections.pop(i)
-            i -= 1
-      finally:
-        i += 1
-
+        next_item = self._output_connection_ids.pop()
+      except KeyError:
+        break
+      else:
+        retval.append(next_item)
+    return retval
+  
   def destroy(self):
     """
     Called during iterations of _handle_periodic in the global IOLoop. Removes the appropriate
     handlers from the IOLoop, and then kills the subprocess.
     """
-    if self._read_callback_enabled:
-      self._io_loop.remove_handler(self._ofd)
-      self._read_callback_enabled = False
-    if self._write_callback_enabled:
-      self._io_loop.remove_handler(self._ifd)
-      self._write_callback_enabled = False
+    self.disable_read_callback()
+    self.disable_write_callback()
 
     self._write_buffer.close()
     self._read_buffer.close()
@@ -202,8 +211,9 @@ class Shell(object):
     except OSError:
       pass # This means the subprocess was already killed, which happens if the command was "quit"
 
-    while len(self._output_connections):
-      output_connection = self._output_connections.pop().handler
+    output_conn_id_list = self._output_connection_ids_to_list()
+    output_connections = self._smanager.output_connections_by_ids(output_conn_id_list)
+    for output_connection in output_connections:
       try:
         output_connection.write({ constants.SHELL_KILLED : True })
         output_connection.finish()
@@ -250,9 +260,6 @@ class Shell(object):
     read out and then written back over the output connection for that client.
     """
     LOG.debug("child_readable")
-    if not len(self._output_connections):
-      return
-
     total_output, more_available, next_chunk_id = self._read_child_output()
 
     # If this is the last output from the shell, let's tell the JavaScript that.
@@ -262,9 +269,10 @@ class Shell(object):
       status = constants.EXITED
       self.last_output_sent = True
 
+    output_conn_id_list = self._output_connection_ids_to_list()
+    output_connections = self._smanager.output_connections_by_ids(output_conn_id_list)
     try:
-      while len(self._output_connections):
-        output_connection = self._output_connections.pop().handler
+      for output_connection in output_connections:
         try:
           output_connection.write({ status: True, constants.OUTPUT: total_output,
              constants.MORE_OUTPUT_AVAILABLE: more_available, constants.NEXT_CHUNK_ID: next_chunk_id})
@@ -272,8 +280,7 @@ class Shell(object):
         except IOError:
           pass
     finally:
-      self._io_loop.remove_handler(self._ofd)
-      self._read_callback_enabled = False
+      self.disable_read_callback()
 
   def _append_to_write_buffer(self, command):
     """
@@ -327,8 +334,7 @@ class Shell(object):
       else:
         return
 
-    self._io_loop.remove_handler(self._ifd)
-    self._write_callback_enabled = False
+    self.disable_write_callback()
     # We have prompt connections to acknowledge that we can receive more stuff. Let's do that.
     while len(self._prompt_connections):
       prompt_connection = self._prompt_connections.pop()
@@ -384,6 +390,7 @@ class ShellManager(object):
   def __init__(self):
     self._shells = {} # The keys are (username, shell_id) tuples
     self._meta = {} # The keys here are usernames
+    self._output_connection_ids = {} # Keys are Hue Instance IDs, values are wrapped connections
     self._io_loop = tornado.ioloop.IOLoop.instance()
     self._periodic_callback = tornado.ioloop.PeriodicCallback(self._handle_periodic, 1000)
     self._periodic_callback.start()
@@ -409,6 +416,26 @@ class ShellManager(object):
     username = key[0]
     self._meta[username].decrement_count()
 
+  def _handle_timeouts(self):
+    """
+    Called every iteration of the global IOLoop by the global ShellManager. This lets us time some
+    old output connections out by writing a "Keep-Alive" equivalent.
+    """
+    currtime = time.time()
+    keys_to_pop = []
+    for hue_instance_id, connection in self._output_connections.iteritems():
+      difftime = currtime - connection.time_received
+      if difftime >= constants.BROWSER_REQUEST_TIMEOUT:
+        keys_to_pop.append(hue_instance_id)
+    
+    for key in keys_to_pop:
+      connection = self._output_connections.pop(key)
+      try:
+        connection.handler.write({ constants.PERIODIC_RESPONSE : True })
+        connection.handler.finish()
+      except IOError:
+        pass
+
   def _handle_periodic(self):
     """
     Called at every IOLoop iteration. Kills the necessary shells and responds to the outstanding
@@ -425,10 +452,9 @@ class ShellManager(object):
           difftime = current_time - shell.time_received
           if difftime >= constants.SHELL_TIMEOUT:
             keys_to_pop.append(key)
-          else:
-            shell.handle_periodic()
       for key in keys_to_pop:
         self._cleanup_shell(key)
+      self._handle_timeouts()
     finally:
       LOG.debug("Leaving _handle_periodic")
 
@@ -498,20 +524,48 @@ class ShellManager(object):
       return
     shell.command_received(command, connection)
 
-  def output_request_received(self, username, shell_id, next_chunk_id, connection):
+  def output_request_received(self, username, hue_instance_id, connection):
     """
-    Called when an output request is received from the client. Sends the command to the appropriate
-    shell instance.
+    Called when an output request is received from the client. Sends the request to the appropriate
+    shell instances.
     """
-    shell = self._shells.get((username, shell_id))
-    if not shell:
+    # Unmarshal and correctly format the serialized_shell_info HTTP parameter.
+    serialized_shell_info = str(self.get_argument(constants.SERIALIZED_SHELL_INFO, ""))
+    shell_pairs = serialized_shell_info.strip().split(";")
+    shell_pairs = [(item.split(",")[0].strip(), item.split(",")[1].strip()) for item in shell_pairs]
+    shell_pairs = [(unicode(item[0]), int(item[1])) for item in shell_pairs]
+    
+    total_cached_output = {}
+    for shell_id, chunk_id in shell_pairs:
+      shell = self._shells.get((username, shell_id))
+      if shell:
+        result = shell.output_request_received(hue_instance_id, chunk_id):
+        if result:
+          total_cached_output["shell%s" % (shell_id,)] = cached_output
+      else:
+        LOG.warn("User '%s' has no shell with ID '%s'" % (username, shell_id))
+
+    if total_cached_output:
       try:
-        connection.write({ constants.NO_SHELL_EXISTS : True })
+        connection.write(total_cached_output)
         connection.finish()
-      except IOError:
+      except IOError
         pass
-      return
-    shell.output_request_received(next_chunk_id, connection)
+    else:
+      if hue_instance_id in self._output_connections:
+        LOG.warn("Hue Instance ID '%s' already has an output connection, replacing...")
+      self._output_connections[hue_instance_id] = TimestampedConnection(connection)
+
+  def output_connections_by_ids(self, ids):
+    retval = []
+    for item in ids:
+      try:
+        next_connection = self._output_connections.pop(item)
+      except KeyError:
+        pass # Some other shell got to it, or it expired, etc. No need to worry
+      else:
+        retval.append(next_connection.handler)
+    return retval
 
   def kill_shell(self, username, shell_id):
     """
@@ -520,7 +574,7 @@ class ShellManager(object):
     """
     shell = self._shells.get((username, shell_id))
     if not shell:
-      LOG.debug("User %s' has no shell with ID '%s'" % (username, shell_id))
+      LOG.debug("User '%s' has no shell with ID '%s'" % (username, shell_id))
       return
     shell.mark_for_cleanup()
 
@@ -554,6 +608,12 @@ class ShellManager(object):
       return
     connection.write({ constants.SUCCESS: True, constants.SHELL_TYPES: self.get_shell_types() })
 
+  def get_connection_by_hue_id(self, hue_instance_id):
+    """
+    Returns the output connection uniquely identified by the given Hue instance ID.
+    """
+    return self._output_connections.pop(hue_instance_id, None)
+
   def get_previous_output(self, username, shell_id):
     """
     Called when the Hue session is restored. Get the outputs that we have previously written out to
@@ -564,3 +624,27 @@ class ShellManager(object):
       return { constants.SHELL_KILLED : True}
     output, next_cid = shell.get_previous_output()
     return {constants.SUCCESS: True, constants.OUTPUT: output, constants.NEXT_CHUNK_ID: next_cid}
+
+  def add_to_output(self, username, shell_id, chunk_id, hue_instance_id, connection):
+    shell = self._shells.get((username, shell_id))
+    if not shell:
+      try:
+        connection.write({ constants.NO_SHELL_EXISTS: True })
+      except IOError:
+        pass
+      return
+    result = shell.output_request_received(hue_instance_id, chunk_id)
+    if result:
+      output = { "shell%s" % (shell_id,) : result }
+      output_connection = self.output_connections_by_ids([hue_instance_id])
+      if output_connection:
+        output_connection = output_connection[0]
+        try:
+          output_connection.write(output)
+          output_connection.finish()
+        except IOError:
+          pass
+    try:
+      connection.write({ constants.SUCCESS: True })
+    except IOError:
+      pass
