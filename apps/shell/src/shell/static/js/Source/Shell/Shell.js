@@ -364,7 +364,8 @@ var Shell = new Class({
       this.enableInput();
       this.input.setStyle("height","auto");
       this.input.set("value", "");
-    }else{ 
+    }else{
+      this.disableInput();
       this.background.setStyle("background-color", "#cccccc");
       if(json.noShellExists){
         this.alert("Error", "This shell does not exist any more. Please restart this app.");
@@ -389,6 +390,7 @@ var Shell = new Class({
         this.shellKilled = true;
       }
     }else{
+      this.disableInput();
       this.background.setStyle("background-color", "#cccccc");
       if(json.noShellExists){
         this.alert("Error", "The shell no longer exists. Please restart this app.");
@@ -431,13 +433,16 @@ var Shell = new Class({
     if(this.restoreReq){
       this.restoreReq.cancel();
     }
-
-    CCS.Desktop.stopShellListener(this.shellId);
     
+    //This might not exist if we haven't gotten around to creating it yet.
     if(this.commandReq){
       this.commandReq.cancel();
     }
 
+    //Tell CCS.Desktop to stop listening for this shellId. Important to do this before
+    //sending the kill shell request because then the resulting output doesn't cause
+    //a non-existent callback to be called.
+    CCS.Desktop.stopShellListener(this.shellId);
     if(this.shellCreated && !this.shellKilled){
       //A one-time request to tell the server to kill the subprocess if it's still alive.
       var shellId = this.shellId;

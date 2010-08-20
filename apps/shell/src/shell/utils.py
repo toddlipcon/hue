@@ -14,12 +14,37 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import shell.constants as constants
 import cStringIO
 import desktop.lib.wsgiserver
 
 """
 A mixed bag of utilties that are useful but aren't themselves terribly interesting.
 """
+
+def parse_shell_pairs(connection):
+  """
+  Parses out and returns a list of (shell_id, chunk_id) tuples from a descendant of RequestHandler.
+  """
+  num_pairs = int(connection.get_argument(constants.NUM_PAIRS, ""))
+  shell_pairs = []
+  for i in xrange(1, num_pairs+1):
+    shell_id_i = connection.get_argument("%s%d" % (constants.SHELL_ID, i), "-1")
+    chunk_id_i = int(connection.get_argument("%s%d" % (constants.CHUNK_ID, i), "-1"))
+    shell_pairs.append((shell_id_i, chunk_id_i))
+  return shell_pairs
+
+def write(connection, response, finish=False):
+  """
+  We do a ton of writing over pipes (not surprisingly) so pulling this out into a utility function
+  here saves a lot of code repeat.
+  """
+  try:
+    connection.write(response)
+    if finish:
+      connection.finish()
+  except IOError:
+    pass
 
 class CustomStringIO(object):
   """
@@ -98,3 +123,41 @@ class FakeHTTPRequest(desktop.lib.wsgiserver.HTTPRequest):
     # Now that parse_request has returned we can remove this key/value pair
     self.environ.pop("ACTUAL_SERVER_PROTOCOL")
 
+class UserMetadata(object):
+  """
+  A simple class to encapsulate the metadata for a user.
+  """
+  def __init__(self, username):
+    self.num_shells = 0
+    self.current_shell_id = 0
+    self.username = username
+
+  def get_next_id(self):
+    """
+    Return the next available ID. Successive calls to this function will yield two different IDs.
+    Returns a unicode string for compatibility with Tornado.
+    """
+    curr_id = self.current_shell_id
+    self.current_shell_id += 1
+    return unicode(curr_id)
+
+  def decrement_count(self):
+    """
+    Decrement the number of shells currently open for the given user.
+    """
+    if self.num_shells > 0:
+      self.num_shells -= 1
+    else:
+      LOG.error("Num shells is negative for user %s" % (self.username,))
+
+  def increment_count(self):
+    """
+    Increment the number of shells currently open for the given user.
+    """
+    self.num_shells += 1
+
+  def get_shell_count(self):
+    """
+    Return the number of shells currently open for the given user.
+    """
+    return self.num_shells

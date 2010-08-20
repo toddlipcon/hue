@@ -95,11 +95,12 @@ class MiddlewareHandler(tornado.web.RequestHandler):
     Otherwise, we set self.deny_hue_access to False.
     Subclasses are responsible for starting every request handling method with:
       if self.deny_hue_access:
-        try:
-          self.write({constants.NOT_LOGGED_IN: True})
-          # self.finish() # This is only if the method is decorated with @tornado.web.asynchronous
-        except IOError:
-          pass
+        utils.write(self, {constants.NOT_LOGGED_IN: True})
+    for synchronous requests.
+    and 
+      if self.deny_hue_access:
+        utils.write(self, {constants.NOT_LOGGED_IN: True}, True)
+    for asynchronous requests.    
     """
     request = self.get_django_httprequest()
     self.django_style_request = request

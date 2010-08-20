@@ -16,18 +16,12 @@
 """Configuration options for the Shell UI"""
 from desktop.lib.conf import Config
 
-SHELL_SERVER_PORT = Config(
-  key="shell_server_port",
-  help="Configure the port the  long-polling server runs on",
-  default=7998,
-  type=int)
-
 # A Template for how to add things to this config file.
 #
 # SHELL_<NAME HERE> = Config( # Pick some meaningful name for the shell type
 #   key = "shell_<name here>" # The variable name in lowercase
 #   help = "<name here> Shell" # A user-friendly version of this shell name
-#   default = "<shell command here>" # The command to be run to start the shell (bc, bash, irb, etc.)
+#   default = "<shell command here>" # The command to be run to start the shell (bc, irb, etc.)
 # )
 # Then you should add the all-caps variable name to the comma-separated default value for SHELL_TYPES.
 
