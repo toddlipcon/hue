@@ -82,12 +82,13 @@ class Shell(object):
     self._write_callback_enabled = False
     self._read_callback_enabled = False
     self._smanager = ShellManager.global_instance()
-
+    
     # State that's accessed by other classes.
     self.last_output_sent = False # Set to true when shell exits and last output has been sent
     # Set to true when any of a bunch of things happens. Once set, _handle_periodic kills the shell
     self.remove_at_next_iteration = False
     self.time_received = time.time() # Timestamp so we know when to send our keep-alive message
+    self.shell_id = None
 
   def get_previous_output(self):
     """
@@ -215,7 +216,7 @@ class Shell(object):
     output_connections = self._smanager.output_connections_by_ids(output_conn_id_list)
     for output_connection in output_connections:
       try:
-        output_connection.write({ constants.SHELL_KILLED : True })
+        output_connection.write({ self.shell_id : { constants.SHELL_KILLED : True }})
         output_connection.finish()
       except IOError:
         pass
@@ -274,8 +275,8 @@ class Shell(object):
     try:
       for output_connection in output_connections:
         try:
-          output_connection.write({ status: True, constants.OUTPUT: total_output,
-             constants.MORE_OUTPUT_AVAILABLE: more_available, constants.NEXT_CHUNK_ID: next_chunk_id})
+          output_connection.write({ self.shell_id: { status: True, constants.OUTPUT: total_output,
+             constants.MORE_OUTPUT_AVAILABLE: more_available, constants.NEXT_CHUNK_ID: next_chunk_id}})
           output_connection.finish()
         except IOError:
           pass
@@ -390,7 +391,7 @@ class ShellManager(object):
   def __init__(self):
     self._shells = {} # The keys are (username, shell_id) tuples
     self._meta = {} # The keys here are usernames
-    self._output_connection_ids = {} # Keys are Hue Instance IDs, values are wrapped connections
+    self._output_connections = {} # Keys are Hue Instance IDs, values are wrapped connections
     self._io_loop = tornado.ioloop.IOLoop.instance()
     self._periodic_callback = tornado.ioloop.PeriodicCallback(self._handle_periodic, 1000)
     self._periodic_callback.start()
@@ -504,6 +505,7 @@ class ShellManager(object):
     shell_id = user_metadata.get_next_id()
     user_metadata.increment_count()
     self._shells[(username, shell_id)] = shell_instance
+    shell_instance.shell_id = shell_id
     try:
       connection.write({ constants.SUCCESS : True, constants.SHELL_ID : shell_id })
     except IOError:
@@ -529,19 +531,20 @@ class ShellManager(object):
     Called when an output request is received from the client. Sends the request to the appropriate
     shell instances.
     """
-    # Unmarshal and correctly format the serialized_shell_info HTTP parameter.
-    serialized_shell_info = str(self.get_argument(constants.SERIALIZED_SHELL_INFO, ""))
-    shell_pairs = serialized_shell_info.strip().split(";")
-    shell_pairs = [(item.split(",")[0].strip(), item.split(",")[1].strip()) for item in shell_pairs]
-    shell_pairs = [(unicode(item[0]), int(item[1])) for item in shell_pairs]
-    
+    num_pairs = int(connection.get_argument(constants.NUM_PAIRS, ""))
+    shell_pairs = []
+    for i in xrange(1, num_pairs+1):
+      shell_id_i = connection.get_argument("%s%d" % (constants.SHELL_ID, i), "-1")
+      chunk_id_i = int(connection.get_argument("%s%d" % (constants.CHUNK_ID, i), "-1"))
+      shell_pairs.append((shell_id_i, chunk_id_i))
+
     total_cached_output = {}
     for shell_id, chunk_id in shell_pairs:
       shell = self._shells.get((username, shell_id))
       if shell:
-        result = shell.output_request_received(hue_instance_id, chunk_id):
+        result = shell.output_request_received(hue_instance_id, chunk_id)
         if result:
-          total_cached_output["shell%s" % (shell_id,)] = cached_output
+          total_cached_output[shell_id] = cached_output
       else:
         LOG.warn("User '%s' has no shell with ID '%s'" % (username, shell_id))
 
@@ -549,7 +552,7 @@ class ShellManager(object):
       try:
         connection.write(total_cached_output)
         connection.finish()
-      except IOError
+      except IOError:
         pass
     else:
       if hue_instance_id in self._output_connections:
@@ -600,12 +603,6 @@ class ShellManager(object):
     if not username in self._meta:
       self._meta[username] = UserMetadata(username)
     user_metadata = self._meta[username]
-    if user_metadata.get_shell_count() >= constants.MAX_SHELLS:
-      try:
-        connection.write({ constants.SHELL_LIMIT_REACHED : True })
-      except IOError:
-        pass
-      return
     connection.write({ constants.SUCCESS: True, constants.SHELL_TYPES: self.get_shell_types() })
 
   def get_connection_by_hue_id(self, hue_instance_id):
@@ -625,25 +622,34 @@ class ShellManager(object):
     output, next_cid = shell.get_previous_output()
     return {constants.SUCCESS: True, constants.OUTPUT: output, constants.NEXT_CHUNK_ID: next_cid}
 
-  def add_to_output(self, username, shell_id, chunk_id, hue_instance_id, connection):
-    shell = self._shells.get((username, shell_id))
-    if not shell:
-      try:
-        connection.write({ constants.NO_SHELL_EXISTS: True })
-      except IOError:
-        pass
-      return
-    result = shell.output_request_received(hue_instance_id, chunk_id)
-    if result:
-      output = { "shell%s" % (shell_id,) : result }
+  def add_to_output(self, username, hue_instance_id, connection):
+    num_pairs = int(connection.get_argument(constants.NUM_PAIRS, ""))
+    shell_pairs = []
+    for i in xrange(1, num_pairs+1):
+      shell_id_i = connection.get_argument("%s%d" % (constants.SHELL_ID, i), "-1")
+      chunk_id_i = int(connection.get_argument("%s%d" % (constants.CHUNK_ID, i), "-1"))
+      shell_pairs.append((shell_id_i, chunk_id_i))
+
+    total_cached_output = {}
+    for shell_id, chunk_id in shell_pairs:
+      shell = self._shells.get((username, shell_id))
+      if shell:
+        result = shell.output_request_received(hue_instance_id, chunk_id)
+        if result:
+          total_cached_output[shell_id] = cached_output
+      else:
+        LOG.warn("User '%s' has no shell with ID '%s'" % (username, shell_id))
+
+    if total_cached_output:
       output_connection = self.output_connections_by_ids([hue_instance_id])
       if output_connection:
         output_connection = output_connection[0]
         try:
-          output_connection.write(output)
+          output_connection.write(total_cached_output)
           output_connection.finish()
         except IOError:
           pass
+
     try:
       connection.write({ constants.SUCCESS: True })
     except IOError:

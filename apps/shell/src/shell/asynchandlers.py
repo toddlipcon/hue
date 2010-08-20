@@ -38,8 +38,6 @@ class AddToOutputHandler(shell.middleware.MiddlewareHandler):
         pass
       return
     username = self.django_style_request.user.username
-    shell_id = self.get_argument(constants.SHELL_ID, "")
-    chunk_id = self.get_argument(constants.CHUNK_ID, "")
     smanager = shellmanager.ShellManager.global_instance()
     hue_instance_id = self.request.headers.get_list(constants.HUE_INSTANCE_ID)
     if len(hue_instance_id) != 1:
@@ -51,7 +49,7 @@ class AddToOutputHandler(shell.middleware.MiddlewareHandler):
         pass
       return
     hue_instance_id = hue_instance_id[0]
-    smanager.add_to_output(username, shell_id, chunk_id, hue_instance_id, self)
+    smanager.add_to_output(username, hue_instance_id, self)
 
 class GetShellTypesHandler(shell.middleware.MiddlewareHandler):
   """

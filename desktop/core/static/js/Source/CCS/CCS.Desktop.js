@@ -530,8 +530,127 @@ CCS.Desktop = {
 		var data = this.getBootstrap(componentOrInstance) || {};
 		if (this.healthInstance && !this.healthInstance.destroyed && data.help) this.healthInstance.load({ requestPath: url || data.help }).focus();
 		else this.healthInstance = CCS.Desktop.launch('Help', data.help);
-	}
+	},
 	
+	listenForShell: function(shellId, chunkId, callback){
+	    if(!this.requestInitialized){
+	        this.outputReq = new Request.JSON({
+                method: 'post',
+                url: '/shell/retrieve_output',
+                onSuccess: this.outputReceived.bind(this),
+                onFailure: this.openOutputChannel.bind(this)
+            });
+            this.addToOutputReq = new Request.JSON({
+                method: 'post',
+                url: '/shell/add_to_output',
+                onSuccess: this.addToOutputCompleted.bind(this),
+                onFailure: this.addToOutputFailed.bind(this)
+            });
+            this.numAdditionalReqsSent = 0;
+            this.additionalReqs = new Array();
+            this.addToOutputReqOpen = false;
+            this.requestOpen = false;
+            this.requestInitialized = true;
+            this.requestsStopped = true;
+            this.dispatchInfo = {};
+	    }
+	    this.dispatchInfo[shellId] = {callback:callback, chunkId:chunkId, useAtNextIteration: true};
+	    if(this.requestOpen){
+	        this.addToOutputChannel(shellId, chunkId);
+	    }
+	    if(this.requestsStopped){
+	        this.openOutputChannel.delay(0, this);
+	        this.requestsStopped = false;
+	    }
+	},
+	
+	stopShellListener: function(shellId){
+	    this.dispatchInfo[shellId] = null;
+	},
+	
+	openOutputChannel: function(){
+	    this.requestOpen = false;
+	    var serializedShells = new Array();
+	    var numShells = 0;
+	    for(var shellId in this.dispatchInfo){
+	        var shellInfo = this.dispatchInfo[shellId];
+	        if(shellInfo){
+	            numShells++;
+	            serializedShells.push("shellId"+numShells+"="+shellId);
+	            serializedShells.push("chunkId"+numShells+"="+shellInfo.chunkId);
+	        }
+	    }
+	    serializedShells.push("numPairs="+numShells);
+	    var serializedData = serializedShells.join("&");
+	    this.outputReq.send({ data: serializedData });
+	    this.requestOpen = true;
+	},
+	
+	outputReceived: function(json, text){
+	    dbug.log(text);
+	    this.requestOpen = false;
+	    var closeOutputChannel = true;
+	    if(json.periodicResponse){
+	        closeOutputChannel = false;
+	    }
+	    for(var shellId in json){
+	        var shellInfo = this.dispatchInfo[shellId];
+	        if(shellInfo){
+	            closeOutputChannel = false;
+	            var result = json[shellId];
+	            if(result.alive || result.exited){
+	                shellInfo.chunkId = result.nextChunkId;
+	                if(!(result.alive || result.moreOutputAvailable)){
+	                    this.stopShellListener(shellId);
+	                }
+	            }else{
+	                this.stopShellListener(shellId);
+	            }
+	            shellInfo.callback(result);
+	        }
+	    }
+	    if(!closeOutputChannel){
+	        setTimeout(this.openOutputChannel.bind(this), 0);
+	    }else{
+	        this.requestsStopped = true;
+	    }
+	},
+	
+	addToOutputChannel: function(shellId, chunkId){
+	    var pairNum = this.additionalReqs.length/2 + 1;
+	    this.additionalReqs.push("shellId"+pairNum+"="+shellId);
+	    this.additionalReqs.push("chunkId"+pairNum+"="+chunkId);
+	    if(!this.addToOutputReqOpen){
+	        this.sendAdditionalReq();
+	    }
+	},
+	
+	sendAdditionalReq: function(){
+	    var numPairs = this.additionalReqs.length/2;
+	    var serializedData = "numPairs="+numPairs+"&"+this.additionalReqs.join("&");
+	    this.numAdditionalReqsSent = this.additionalReqs.length;
+	    this.addToOutputReqOpen = true;
+	    this.addToOutputReq.send({ data: serializedData });
+	},
+	
+	addToOutputCompleted: function(json, text){
+	    this.addToOutputReqOpen = false;
+	    if(json.success){
+	        this.additionalReqs.splice(0, this.numAdditionalReqsSent);
+	        this.numAdditionalReqsSent = 0;
+	        if(this.additionalReqs.length){
+	            setTimeout(this.sendAdditionalReq.bind(this), 0);
+	        }
+	    }else{
+	        setTimeout(this.sendAdditionalReq.bind(this), 0);
+	        //TODO: Figure out what to do here
+	    }
+	},
+	
+	addToOutputFailed: function(){
+	    this.addToOutputReqOpen = false;
+	    setTimeout(this.sendAdditionalReq.bind(this), 0);
+	}
 };
 
 //store the state of the desktop on unload

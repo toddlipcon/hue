@@ -183,16 +183,6 @@ var Shell = new Class({
     //If the user clicks anywhere in the jframe, focus the textarea.
     this.background.addEvent("click", this.focusInput.bind(this));
 
-    //The perpetually open output request. We always keep this request
-    //open so the server has a way of pushing data to the client whenever
-    //data is received.
-    this.outputReq = new Request.JSON({
-      method: 'post',
-      url: '/shell/retrieve_output',
-      onSuccess: this.outputReceived.bind(this),
-      onFailure: this.openOutputChannel.bind(this)
-    });
-
     //The command-sending request.  We don't need this to be perpetually open,
     //but rather to be something that we can reuse repeatedly to send commands
     //to the subprocess running on the server.
@@ -202,9 +192,7 @@ var Shell = new Class({
       onSuccess: this.commandProcessed.bind(this)
     });
 
-    //The timeout is to avoid the "loading" icon of the browser spinning forever since this request
-    //will always be kept open.
-    this.openOutputChannel.delay(0, this);
+    CCS.Desktop.listenForShell(this.shellId, this.nextChunkId, this.outputReceived.bind(this));
   },
   
   setupTerminalForSelection: function(shellTypes){
@@ -333,16 +321,6 @@ var Shell = new Class({
     this.input.removeEvents('keypress');
     this.button.removeEvents('click');
     
-    //The perpetually open output request. We always keep this request
-    //open so the server has a way of pushing data to the client whenever
-    //data is received.
-    this.outputReq = new Request.JSON({
-      method: 'post',
-      url: '/shell/retrieve_output',
-      onSuccess: this.outputReceived.bind(this),
-      onFailure: this.openOutputChannel.bind(this)
-    });
-    
     //The command-sending request.  We don't need this to be perpetually open,
     //but rather to be something that we can reuse repeatedly to send commands
     //to the subprocess running on the server.
@@ -358,9 +336,7 @@ var Shell = new Class({
     this.jframe.scroller.toBottom();
     this.input.focus();
     
-    //The timeout is to avoid the "loading" icon of the browser spinning forever since this request
-    //will always be kept open.
-    this.openOutputChannel.delay(0, this);
+    CCS.Desktop.listenForShell(this.shellId, this.nextChunkId, this.outputReceived.bind(this));
   },
   
   handleKeyPress: function(event){
@@ -402,40 +378,16 @@ var Shell = new Class({
     }
   },
   
-  openOutputChannel:function(){
-    var params = [ [ "shellId", this.shellId ], [ "nextChunkId", this.nextChunkId] ];
-    var serializedParams = [];
-    params.each(function(pair){
-      serializedParams.push(pair.join("="));
-    });
-    var serializedData = serializedParams.join("&");
-    this.outputReq.send({
-      data: serializedData
-    });
-  },
-  
-  outputReceived:function(json, text){
+  outputReceived: function(json){
     if(json.alive || json.exited){
       var escapedText = json.output.escapeHTML();
       this.output.set("html",this.output.get('html')+escapedText);
       this.jframe.scroller.toBottom();
-      this.nextChunkId = json.nextChunkId;
-      if(json.alive || json.moreOutputAvailable){
-        //We have to use a timeout because re-firing the request in the onSuccess handler of
-        //the previous use of the request object causes buggy behavior.
-        //Using .delay(0, this) also causes the same behavior.
-        setTimeout(this.openOutputChannel.bind(this), 0);
-      }
       if(json.exited){
         this.disableInput();
         this.input.setStyle("display", "none");
         this.shellKilled = true;
       }
-    }else if(json.periodicResponse){
-      //We have to use a timeout because re-firing the request in the onSuccess handler of
-      //the previous use of the request object causes buggy behavior.
-      //Using .delay(0, this) also causes the same behavior.
-      setTimeout(this.openOutputChannel.bind(this), 0);
     }else{
       this.background.setStyle("background-color", "#cccccc");
       if(json.noShellExists){
@@ -480,10 +432,8 @@ var Shell = new Class({
       this.restoreReq.cancel();
     }
 
-    //These requests might not exist if we haven't got around to sending them yet.
-    if(this.outputReq){
-      this.outputReq.cancel();
-    }
+    CCS.Desktop.stopShellListener(this.shellId);
+    
     if(this.commandReq){
       this.commandReq.cancel();
     }
