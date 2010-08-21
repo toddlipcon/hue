@@ -20,24 +20,25 @@ are the members of JSON objects, which are stored here for
 easy reference.
 """
 
+SHELL_ID = "shellId"
+NOT_LOGGED_IN = "notLoggedIn"
+SHELL_KILLED = "shellKilled"
+SUCCESS = "success"
+
+
 # Parameter/JSON object member names
 ALIVE = "alive"
 EXITED = "exited"
 OUTPUT = "output"
-SUCCESS = "success"
-SHELL_ID = "shellId"
 COMMAND = "lineToSend"
 KEY_NAME = "keyName"
 NICE_NAME = "niceName"
 SHELL_TYPES = "shellTypes"
-SHELL_KILLED = "shellKilled"
 CHUNK_ID = "chunkId"
 NEXT_CHUNK_ID = "nextChunkId"
-NOT_LOGGED_IN = "notLoggedIn"
 NO_SHELL_EXISTS = "noShellExists"
 BUFFER_EXCEEDED = "bufferExceeded"
 PERIODIC_RESPONSE = "periodicResponse"
-SHELL_LIMIT_REACHED = "shellLimitReached"
 SHELL_CREATE_FAILED = "shellCreateFailed"
 MORE_OUTPUT_AVAILABLE = "moreOutputAvailable"
 NUM_PAIRS = "numPairs"

@@ -488,8 +488,8 @@ class ShellManager(object):
     for shell_id, chunk_id in shell_pairs:
       shell = self._shells.get((username, shell_id))
       if shell:
-        result = shell.output_request_received(hue_instance_id, chunk_id)
-        if result:
+        cached_output = shell.output_request_received(hue_instance_id, chunk_id)
+        if cached_output:
           total_cached_output[shell_id] = cached_output
       else:
         LOG.warn("User '%s' has no shell with ID '%s'" % (username, shell_id))
@@ -561,11 +561,15 @@ class ShellManager(object):
     """
     shell = self._shells.get((username, shell_id))
     if not shell:
-      return { constants.SHELL_KILLED : True}
+      return { constants.SHELL_KILLED : True }
     output, next_cid = shell.get_previous_output()
-    return {constants.SUCCESS: True, constants.OUTPUT: output, constants.NEXT_CHUNK_ID: next_cid}
+    return { constants.SUCCESS: True, constants.OUTPUT: output, constants.NEXT_CHUNK_ID: next_cid }
 
   def add_to_output(self, username, hue_instance_id, shell_pairs, connection):
+    """
+    Adds the given shell_id, chunk_id pairs to the output connection associated with the given Hue
+    instance ID.
+    """
     total_cached_output = {}
     for shell_id, chunk_id in shell_pairs:
       shell = self._shells.get((username, shell_id))

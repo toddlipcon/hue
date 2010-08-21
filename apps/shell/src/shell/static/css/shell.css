@@ -26,10 +26,15 @@
 	left: 3px;
 }
 
+.shell .fixed_width_font{
+    font-family: monospace;
+    font-size: 14px;
+}
+
 .shell textarea{
     border-width:0px;
     position:absolute;
-    width:90%;
+    width:85%;
     overflow:hidden;
     outline:none;
     padding:0px;

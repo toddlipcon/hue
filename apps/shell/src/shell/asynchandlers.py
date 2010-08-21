@@ -140,4 +140,4 @@ class RestoreShellHandler(shell.middleware.MiddlewareHandler):
     shell_id = self.get_argument(constants.SHELL_ID, "")
     smanager = shellmanager.ShellManager.global_instance()
     result = smanager.get_previous_output(self.django_style_request.user.username, shell_id)
-    self.write(result)
+    utils.write(self, result)
