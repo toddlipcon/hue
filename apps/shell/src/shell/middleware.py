@@ -97,10 +97,10 @@ class MiddlewareHandler(tornado.web.RequestHandler):
       if self.deny_hue_access:
         utils.write(self, {constants.NOT_LOGGED_IN: True})
     for synchronous requests.
-    and 
+    and
       if self.deny_hue_access:
         utils.write(self, {constants.NOT_LOGGED_IN: True}, True)
-    for asynchronous requests.    
+    for asynchronous requests.
     """
     request = self.get_django_httprequest()
     self.django_style_request = request

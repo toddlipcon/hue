@@ -27,11 +27,9 @@ import signal
 LOG = logging.getLogger(__name__)
 
 try:
-  unused = BaseException
-except NameError:
-  BaseException = Exception
-else:
-  del unused
+  from exceptions import BaseException
+except ImportError:
+  from exceptions import Exception as BaseException
 
 class Command(NoArgsCommand):
   """
@@ -41,32 +39,15 @@ class Command(NoArgsCommand):
     django_port = str(desktop.conf.CHERRYPY_PORT.get())
     path_to_hue = desktop.lib.paths.get_build_dir("env", "bin", "hue")
     
-    p1 = subprocess.Popen([path_to_hue, "runserver_plus", django_port], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    p2 = subprocess.Popen([path_to_hue, "runlpserver"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    p3 = subprocess.Popen([path_to_hue, "nginx"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+    p1 = subprocess.Popen([path_to_hue, "runserver_plus", django_port])
+    p2 = subprocess.Popen([path_to_hue, "runlpserver"])
+    p3 = subprocess.Popen([path_to_hue, "nginx"])
     
-    p1_ofd = p1.stdout.fileno()
-    p2_ofd = p2.stdout.fileno()
-    p3_ofd = p3.stdout.fileno()
-    
-    fcntl.fcntl(p1_ofd, fcntl.F_SETFL, fcntl.fcntl(p1_ofd, fcntl.F_GETFL) | os.O_NONBLOCK)
-    fcntl.fcntl(p2_ofd, fcntl.F_SETFL, fcntl.fcntl(p2_ofd, fcntl.F_GETFL) | os.O_NONBLOCK)
-    fcntl.fcntl(p3_ofd, fcntl.F_SETFL, fcntl.fcntl(p3_ofd, fcntl.F_GETFL) | os.O_NONBLOCK)
-    
-    subprocess_ofds = [p1_ofd, p2_ofd, p3_ofd]
     try:
-      while True:
-        readable_fds, writable_fds, other_fds = select.select(subprocess_ofds, [], [])
-        for item in readable_fds:
-          try:
-            output = os.read(item, 40960)
-            if len(output.strip()): # Ignore whitespace only - not interesting
-              print output, # We want to do print, not LOG.debug, because the child subprocesses
-              # already did LOG.foo for all the output. And don't add newlines, since they already
-              # exist in the output from the child subprocesses.
-          except OSError:
-            pass
-    except BaseException, exc:
+      p1.wait()
+      p2.wait()
+      p3.wait()
+    except BaseException:
       LOG.debug("Stopping servers...")
       try:
         os.kill(p1.pid, signal.SIGKILL)

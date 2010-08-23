@@ -93,7 +93,7 @@ class Shell(object):
     self.shell_id = shell_id
     self.last_output_sent = False
     self.remove_at_next_iteration = False
-    # Timestamp that is updated on shell creation and on every output request. Used so that we know 
+    # Timestamp that is updated on shell creation and on every output request. Used so that we know
     # when to kill the shell.
     self.time_received = time.time()
 
@@ -132,7 +132,7 @@ class Shell(object):
     if not self._write_callback_enabled:
       self._io_loop.add_handler(self._ifd, self._child_writable, self._io_loop.WRITE)
       self._write_callback_enabled = True
-      
+
   def enable_read_callback(self):
     """
     Register a callback with the global IOLoop for when the child becomes readable.
@@ -148,7 +148,7 @@ class Shell(object):
     if self._read_callback_enabled:
       self._io_loop.remove_handler(self._ofd)
       self._read_callback_enabled = False
-  
+
   def disable_write_callback(self):
     """
     Unregister the _child_writable callback from the global IOLoop.
@@ -156,7 +156,7 @@ class Shell(object):
     if self._write_callback_enabled:
       self._io_loop.remove_handler(self._ifd)
       self._write_callback_enabled = False
-  
+
   def mark_for_cleanup(self):
     """
     Mark this shell to be destroyed at the next iteration of the global IOLoop instance.
@@ -176,10 +176,10 @@ class Shell(object):
     output = self._read_buffer.read(bytes_to_read)
     self._read_buffer.seek(old_pos)
     return output
-  
+
   def output_request_received(self, hue_instance_id, chunk_id):
     """
-    If chunk_id represents an old chunk id, which already has output, returns all cached output 
+    If chunk_id represents an old chunk id, which already has output, returns all cached output
     since that chunk and the next chunk ID in a dictionary. Chunks are coalesced if the chunk id
     is more than 1 chunk old, so the returned next chunk ID is not guaranteed to be 1 greater than
     the one passed in.  If the chunk ID is the latest one, adds listeners and returns None.
@@ -207,7 +207,7 @@ class Shell(object):
       else:
         retval.append(next_item)
     return retval
-  
+
   def destroy(self):
     """
     Called during iterations of _handle_periodic in the global IOLoop. Removes the appropriate
@@ -232,7 +232,7 @@ class Shell(object):
     for output_connection in output_connections:
       utils.write(output_connection, { self.shell_id : { constants.SHELL_KILLED : True }}, True)
 
-    while len(self._prompt_connections):
+    while self._prompt_connections:
       prompt_connection = self._prompt_connections.pop()
       utils.write(prompt_connection, { constants.SHELL_KILLED : True }, True)
 
@@ -318,7 +318,7 @@ class Shell(object):
 
   def _child_writable(self, fd, events):
     """
-    Called by the global IOLoop instance when a child subprocess's input file descriptor becomes 
+    Called by the global IOLoop instance when a child subprocess's input file descriptor becomes
     available for writing. This is the point at which we send the OK back to the client so that the
     prompt can become available in the browser window.
     """
@@ -339,13 +339,13 @@ class Shell(object):
       else:
         return
 
-    # We could try to figure out how many bytes were written, and then immediately do the stuff 
+    # We could try to figure out how many bytes were written, and then immediately do the stuff
     # below, but having this code and the code above be mutually exclusive makes the code cleaner
     # and less error-prone (and not much more CPU-intensive).
 
     self.disable_write_callback()
     # We have prompt connections to acknowledge that we can receive more stuff. Let's do that.
-    while len(self._prompt_connections):
+    while self._prompt_connections:
       prompt_connection = self._prompt_connections.pop()
       utils.write(prompt_connection, { constants.SUCCESS : True }, True)
 
@@ -360,6 +360,17 @@ class ShellManager(object):
     self._io_loop = tornado.ioloop.IOLoop.instance()
     self._periodic_callback = tornado.ioloop.PeriodicCallback(self._handle_periodic, 1000)
     self._periodic_callback.start()
+    self._cached_shell_types = []
+    self._cached_shell_info = {}
+    for item in shell.conf.SHELL_TYPES.keys():
+      nice_name = shell.conf.SHELL_TYPES[item].nice_name.get()
+      short_name = shell.conf.SHELL_TYPES[item].short_name.get()
+      command = shell.conf.SHELL_TYPES[item].command.get()
+      self._cached_shell_types.append({ constants.NICE_NAME: nice_name,
+                                        constants.KEY_NAME: short_name })
+      self._cached_shell_info[short_name] = command
+    self._cached_shell_types_response = { constants.SUCCESS: True,
+                                                     constants.SHELL_TYPES: self.get_shell_types() }
 
   @classmethod
   def global_instance(cls):
@@ -393,7 +404,7 @@ class ShellManager(object):
       difftime = currtime - connection.time_received
       if difftime >= constants.BROWSER_REQUEST_TIMEOUT:
         keys_to_pop.append(hue_instance_id)
-    
+
     for key in keys_to_pop:
       connection = self._output_connections.pop(key)
       utils.write(connection.handler, { constants.PERIODIC_RESPONSE : True }, True)
@@ -407,11 +418,11 @@ class ShellManager(object):
     try:
       keys_to_pop = []
       current_time = time.time()
-      for key, shell in self._shells.iteritems():
-        if shell.last_output_sent or shell.remove_at_next_iteration:
+      for key, shell_instance in self._shells.iteritems():
+        if shell_instance.last_output_sent or shell_instance.remove_at_next_iteration:
           keys_to_pop.append(key)
         else:
-          difftime = current_time - shell.time_received
+          difftime = current_time - shell_instance.time_received
           if difftime >= constants.SHELL_TIMEOUT:
             keys_to_pop.append(key)
       for key in keys_to_pop:
@@ -420,39 +431,19 @@ class ShellManager(object):
     finally:
       LOG.debug("Leaving _handle_periodic")
 
-  def _get_command_from_key(self, key_name):
-    """
-    Attempts to determine the command to run from the key_name passed in. For example, 
-    "flume_shell" becomes "flume shell" and "pig_shell" becomes "pig -l /dev/null".
-    """
-    key_name = str(key_name)
-    command = None
-    try:
-      command = getattr(shell.conf, key_name.upper()) # The short-circuit
-      command = command.get()
-    except AttributeError:
-      shell_types = shell.conf.SHELL_TYPES.get() # If it fails, look through all of SHELL_TYPES
-      shell_types = shell_types.split(",")
-      shell_types = [getattr(shell.conf, item.strip()) for item in shell_types]
-      for item in shell_types:
-        if item.config.key == key_name:
-          command = item.config.default
-          break
-    return command
-  
   def try_create(self, username, key_name, connection):
     """
     Attemps to create a new shell subprocess for the given user. Writes the appropriate failure or
     success response to the client.
     """
-    command = self._get_command_from_key(key_name)
+    command = self._cached_shell_info.get(key_name)
     if command is None:
       utils.write(connection, { constants.SHELL_CREATE_FAILED : True })
       return
 
     if not username in self._meta:
       self._meta[username] = utils.UserMetadata(username)
-    user_metadata = self._meta[username] 
+    user_metadata = self._meta[username]
     shell_id = user_metadata.get_next_id()
     user_metadata.increment_count()
     try:
@@ -473,11 +464,11 @@ class ShellManager(object):
     Called when a command is received from the client. Sends the command to the appropriate
     Shell instance.
     """
-    shell = self._shells.get((username, shell_id))
+    shell_instance = self._shells.get((username, shell_id))
     if not shell:
       utils.write(connection, { constants.NO_SHELL_EXISTS : True }, True)
       return
-    shell.command_received(command, connection)
+    shell_instance.command_received(command, connection)
 
   def output_request_received(self, username, hue_instance_id, shell_pairs, connection):
     """
@@ -486,9 +477,9 @@ class ShellManager(object):
     """
     total_cached_output = {}
     for shell_id, chunk_id in shell_pairs:
-      shell = self._shells.get((username, shell_id))
-      if shell:
-        cached_output = shell.output_request_received(hue_instance_id, chunk_id)
+      shell_instance = self._shells.get((username, shell_id))
+      if shell_instance:
+        cached_output = shell_instance.output_request_received(hue_instance_id, chunk_id)
         if cached_output:
           total_cached_output[shell_id] = cached_output
       else:
@@ -503,6 +494,10 @@ class ShellManager(object):
       self._output_connections[hue_instance_id] = TimestampedConnection(connection)
 
   def output_connections_by_ids(self, ids):
+    """
+    Returns a list of output connection handlers for the Hue instances identified by the specified
+    IDs.
+    """
     retval = []
     for item in ids:
       try:
@@ -518,34 +513,23 @@ class ShellManager(object):
     Called when the user closes the JFrame in Hue. Marks the appropriate shell for cleanup on the
     next IOLoop iteration.
     """
-    shell = self._shells.get((username, shell_id))
-    if not shell:
+    shell_instance = self._shells.get((username, shell_id))
+    if not shell_instance:
       LOG.debug("User '%s' has no shell with ID '%s'" % (username, shell_id))
       return
-    shell.mark_for_cleanup()
+    shell_instance.mark_for_cleanup()
 
   def get_shell_types(self):
     """
     Returns a list of the shell types available. Each shell type available is a dictionary with keys
     constants.NICE_NAME and constants.KEY_NAME
     """
-    if not hasattr(self, "_cached_shell_types"):
-      shell_types = shell.conf.SHELL_TYPES.get()
-      shell_types = shell_types.split(",")
-      shell_types = [getattr(shell.conf, item.strip()) for item in shell_types]
-      shell_types = [{constants.NICE_NAME: item.config.help, 
-                      constants.KEY_NAME: item.config.key} for item in shell_types]
-      self._cached_shell_types = shell_types
     return self._cached_shell_types
 
-  def handle_shell_types_request(self, username, connection):
+  def handle_shell_types_request(self, connection):
     """
-    Responds with the shell types available, if the user is allowed to have any more shells open.
-    Otherwise responds with 'No more shells' message.
+    Responds with the shell types available.
     """
-    if not hasattr(self, "_cached_shell_types_response"):
-      self._cached_shell_types_response = { constants.SUCCESS: True, 
-                                   constants.SHELL_TYPES: self.get_shell_types() }
     utils.write(connection, self._cached_shell_types_response)
 
   def get_connection_by_hue_id(self, hue_instance_id):
@@ -559,10 +543,10 @@ class ShellManager(object):
     Called when the Hue session is restored. Get the outputs that we have previously written out to
     the client as one big string.
     """
-    shell = self._shells.get((username, shell_id))
-    if not shell:
+    shell_instance = self._shells.get((username, shell_id))
+    if not shell_instance:
       return { constants.SHELL_KILLED : True }
-    output, next_cid = shell.get_previous_output()
+    output, next_cid = shell_instance.get_previous_output()
     return { constants.SUCCESS: True, constants.OUTPUT: output, constants.NEXT_CHUNK_ID: next_cid }
 
   def add_to_output(self, username, hue_instance_id, shell_pairs, connection):
@@ -572,11 +556,11 @@ class ShellManager(object):
     """
     total_cached_output = {}
     for shell_id, chunk_id in shell_pairs:
-      shell = self._shells.get((username, shell_id))
-      if shell:
-        result = shell.output_request_received(hue_instance_id, chunk_id)
+      shell_instance = self._shells.get((username, shell_id))
+      if shell_instance:
+        result = shell_instance.output_request_received(hue_instance_id, chunk_id)
         if result:
-          total_cached_output[shell_id] = cached_output
+          total_cached_output[shell_id] = result
       else:
         LOG.warn("User '%s' has no shell with ID '%s'" % (username, shell_id))
 

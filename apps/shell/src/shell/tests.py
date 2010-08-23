@@ -33,12 +33,12 @@ class IOLoopStopper(threading.Thread):
   """
   The IOLoop from Tornado runs forever, so before each time we start the
   IOLoop, we start one of these threads, so that it can stop the IOLoop
-  after 10 seconds or some output has been produced, whichever is earlier.
+  after a few seconds or some output has been produced, whichever is earlier.
   """
   def __init__(self, output, *args, **kwargs):
     threading.Thread.__init__(self, *args, **kwargs)
     self.output = output
-    self.timeout = 10
+    self.timeout = 2 # In seconds
 
   def run(self):
     start = time.time()
@@ -51,117 +51,147 @@ def test_create():
   """Tests shell creation."""
   smanager = shellmanager.ShellManager.global_instance()
   output = utils.TestIO("a")
-  smanager.try_create("a", output)
+  smanager.try_create("a", "pig", output)
   assert_true(constants.SUCCESS in output.read(), "Shell create test failed")
 
   smanager.kill_shell("a", output.read()[constants.SHELL_ID])
   output = utils.TestIO("a")
-  IOLoopStopper(output).start()
+  helper = IOLoopStopper(output)
+  helper.start()
   tornado.ioloop.IOLoop.instance().start()
+  helper.join()
+  LOG.debug("Done")
 
 def test_output():
   """Tests output from shell."""
   smanager = shellmanager.ShellManager.global_instance()
   output = utils.TestIO("a")
-  smanager.try_create("a", output)
+  smanager.try_create("a", "pig", output)
   assert_true(constants.SUCCESS in output.read(), "Shell create failed in test_output")
 
   shell_id = output.read().get(constants.SHELL_ID)
   output = utils.TestIO("a")
-  smanager.output_request_received("a", shell_id, 0, output)
-  IOLoopStopper(output).start()
+  LOG.debug("The shell id is "+shell_id)
+  smanager.output_request_received("a", "", [(shell_id, 0)], output)
+  helper = IOLoopStopper(output)
+  helper.start()
   tornado.ioloop.IOLoop.instance().start()
+  helper.join()
   LOG.debug(output.read())
-  assert_true(constants.ALIVE in output.read() or
-              constants.PERIODIC_RESPONSE in output.read() or
-              constants.EXITED in output.read() )
+  assert_true(shell_id in output.read())
+  if shell_id in output.read():
+    assert_true(constants.ALIVE in output.read()[shell_id] or
+              constants.EXITED in output.read()[shell_id])
 
   smanager.kill_shell("a", shell_id)
   output = utils.TestIO("a")
-  IOLoopStopper(output).start()
+  helper = IOLoopStopper(output)
+  helper.start()
   tornado.ioloop.IOLoop.instance().start()
+  helper.join()
+  LOG.debug("Done")
 
 def test_input():
   """Tests writing a gibberish command into a shell and finding some output (the help)"""
   smanager = shellmanager.ShellManager.global_instance()
   output = utils.TestIO("a")
-  smanager.try_create("a", output)
+  smanager.try_create("a", "pig", output)
   assert_true(constants.SUCCESS in output.read(), "Shell create failed in test_input")
 
   shell_id = output.read().get(constants.SHELL_ID)
   output = utils.TestIO("a")
-  smanager.output_request_received("a", shell_id, 0, output)
-  IOLoopStopper(output).start()
+  smanager.output_request_received("a", "", [(shell_id, 0)], output)
+  helper = IOLoopStopper(output)
+  helper.start()
   tornado.ioloop.IOLoop.instance().start()
+  helper.join()
 
   output = utils.TestIO("a")
   smanager.command_received("a", shell_id, "asdf", output)
-  IOLoopStopper(output).start()
+  helper = IOLoopStopper(output)
+  helper.start()
   tornado.ioloop.IOLoop.instance().start()
+  helper.join()
+  LOG.debug(output.read())
   assert_true(constants.SUCCESS in output.read(), 'Sending command failed')
 
   smanager.kill_shell("a", shell_id)
   output = utils.TestIO("a")
-  IOLoopStopper(output).start()
+  helper = IOLoopStopper(output)
+  helper.start()
   tornado.ioloop.IOLoop.instance().start()
+  helper.join()
+  LOG.debug("Done")
 
 def test_kill():
   """Tests shell killing"""
   smanager = shellmanager.ShellManager.global_instance()
 
   output = utils.TestIO("a")
-  smanager.try_create("a", output)
+  smanager.try_create("a", "pig", output)
   assert_true(constants.SUCCESS in output.read(), "First shell create failed in test_kill")
   shell_id1 = output.read()[constants.SHELL_ID]
 
   output = utils.TestIO("a")
-  smanager.try_create("a", output)
+  smanager.try_create("a", "pig", output)
   assert_true(constants.SUCCESS in output.read(), "Second shell create failed in test_kill")
   shell_id2 = output.read()[constants.SHELL_ID]
 
   output = utils.TestIO("a")
-  smanager.try_create("a", output)
+  smanager.try_create("a", "pig", output)
   assert_true(constants.SUCCESS in output.read(), "Third shell create failed in test_kill")
   shell_id3 = output.read()[constants.SHELL_ID]
-
-  output = utils.TestIO("a")
-  smanager.try_create("a", output)
-  assert_true(constants.SHELL_LIMIT_REACHED in output.read())
 
   smanager.kill_shell("a", shell_id1)
   smanager.kill_shell("a", shell_id2)
   smanager.kill_shell("a", shell_id3)
 
   output = utils.TestIO("a")
-  IOLoopStopper(output).start()
+  smanager.output_request_received("a", "", [(shell_id1, 0),
+                                             (shell_id2, 0),
+                                             (shell_id3, 0)], output)
+  helper = IOLoopStopper(output)
+  helper.start()
   tornado.ioloop.IOLoop.instance().start()
-
-  smanager.try_create("a", output)
-  assert_true(constants.SUCCESS in output.read(), "Fourth shell created failed in test_kill")
-
-  smanager.kill_shell("a", output.read()[constants.SHELL_ID])
+  helper.join()
+  assert_true( shell_id1 in output.read() or
+               shell_id2 in output.read() or
+               shell_id3 in output.read())
   output = utils.TestIO("a")
-  IOLoopStopper(output).start()
+  smanager.output_request_received("a", "", [(shell_id1, 0),
+                                             (shell_id2, 0),
+                                             (shell_id3, 0)], output)
+  helper = IOLoopStopper(output)
+  helper.start()
   tornado.ioloop.IOLoop.instance().start()
+  helper.join()
+  assert_true( shell_id1 in output.read() and
+               shell_id2 in output.read() and
+               shell_id3 in output.read())
+  assert_true(constants.NO_SHELL_EXISTS in output.read()[shell_id1] and
+              constants.NO_SHELL_EXISTS in output.read()[shell_id2] and
+              constants.NO_SHELL_EXISTS in output.read()[shell_id3])
+  LOG.debug("Done")
 
 def test_restore():
   """Tests shell restoration."""
   smanager = shellmanager.ShellManager.global_instance()
   output = utils.TestIO("a")
-  smanager.try_create("a", output)
+  smanager.try_create("a", "pig", output)
   assert_true(constants.SUCCESS in output.read(), "Shell create failed in test_output")
 
   shell_id = output.read().get(constants.SHELL_ID)
   output = utils.TestIO("a")
-  smanager.output_request_received("a", shell_id, 0, output)
-  IOLoopStopper(output).start()
+  smanager.output_request_received("a", "", [(shell_id, 0)], output)
+  helper = IOLoopStopper(output)
+  helper.start()
   tornado.ioloop.IOLoop.instance().start()
+  helper.join()
   LOG.debug(output.read())
-  assert_true(constants.ALIVE in output.read() or
-              constants.PERIODIC_RESPONSE in output.read() or
-              constants.EXITED in output.read() )
-  previous_output = output.read()[constants.OUTPUT]
+  assert_true(shell_id in output.read())
+  previous_output = output.read()[shell_id][constants.OUTPUT]
   reread_output = smanager.get_previous_output("a", shell_id)
   assert_true(constants.SUCCESS in reread_output)
   reread_output = reread_output[constants.OUTPUT]
   assert_equal(previous_output, reread_output)
+  LOG.debug("Done")

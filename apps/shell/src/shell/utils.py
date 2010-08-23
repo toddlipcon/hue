@@ -14,13 +14,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shell.constants as constants
-import cStringIO
-import desktop.lib.wsgiserver
-
 """
 A mixed bag of utilties that are useful but aren't themselves terribly interesting.
 """
+
+import shell.constants as constants
+import cStringIO
+import desktop.lib.wsgiserver
+import logging
+
+LOG = logging.getLogger(__name__)
 
 def parse_shell_pairs(connection):
   """
@@ -43,8 +46,8 @@ def write(connection, response, finish=False):
     connection.write(response)
     if finish:
       connection.finish()
-  except IOError:
-    pass
+  except IOError, exc:
+    LOG.error("Could not write over output pipe: %s" % (exc,))
 
 class CustomStringIO(object):
   """

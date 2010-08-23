@@ -38,14 +38,8 @@ class RetrieveOutputHandler(shell.middleware.MiddlewareHandler):
       utils.write(self, {constants.NOT_LOGGED_IN: True}, True)
       return
 
-    hue_instance_id = self.request.headers.get_list(constants.HUE_INSTANCE_ID)
-    if len(hue_instance_id) != 1:
-      LOG.error("Hue-Instance-ID header was not properly set in request from user %s" % (username,))
-      utils.write(self, "", True) # TODO: Not sure what to do in this case.
-      return
-
-    hue_instance_id = hue_instance_id[0]
     username = self.django_style_request.user.username
+    hue_instance_id = self.request.headers.get_list(constants.HUE_INSTANCE_ID)[0]
     smanager = shellmanager.ShellManager.global_instance()
     shell_pairs = utils.parse_shell_pairs(self)
     smanager.output_request_received(username, hue_instance_id, shell_pairs, self)
@@ -59,14 +53,8 @@ class AddToOutputHandler(shell.middleware.MiddlewareHandler):
       utils.write(self, { constants.NOT_LOGGED_IN: True })
       return
 
-    hue_instance_id = self.request.headers.get_list(constants.HUE_INSTANCE_ID)
-    if len(hue_instance_id) != 1:
-      LOG.error("Hue-Instance-ID header was not properly set in request from user %s" % (username,))
-      utils.write(self, "") # TODO: Not sure what to do in this case.
-      return
-
-    hue_instance_id = hue_instance_id[0]
     username = self.django_style_request.user.username
+    hue_instance_id = self.request.headers.get_list(constants.HUE_INSTANCE_ID)[0]
     smanager = shellmanager.ShellManager.global_instance()
     shell_pairs = utils.parse_shell_pairs(self)
     smanager.add_to_output(username, hue_instance_id, shell_pairs, self)
@@ -79,9 +67,7 @@ class GetShellTypesHandler(shell.middleware.MiddlewareHandler):
     if self.deny_hue_access:
       utils.write(self, { constants.NOT_LOGGED_IN: True })
       return
-
-    username = self.django_style_request.user.username
-    shellmanager.ShellManager.global_instance().handle_shell_types_request(username, self)
+    shellmanager.ShellManager.global_instance().handle_shell_types_request(self)
 
 class KillShellHandler(shell.middleware.MiddlewareHandler):
   """

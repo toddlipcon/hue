@@ -55,7 +55,7 @@ ART.Sheet.define('window.art.browser.shell', {
       replacement: "<br>"
     }
   ];
-  
+
   String.implement({
     escapeHTML: function(){
       var cleaned = this;
@@ -73,7 +73,7 @@ var Shell = new Class({
     displayHistory: false,
     className: 'art browser logo_header shell'
   },
-  
+
   initialize: function(path, options){
     this.parent(path || '/shell/', options);
     if(options && options.shellId){
@@ -81,13 +81,13 @@ var Shell = new Class({
     }
     this.addEvent("load", this.startShell.bind(this));
   },
-  
+
   startShell: function(view){
     // Set up some state shared between "fresh" and "restored" shells.
-    
+
     this.jframe.markForCleanup(this.cleanUp.bind(this));
     this.shellKilled = false;
-    
+
     this.background = $(this).getElement('.jframe_contents');
     this.background.setStyle("background-color", "#ffffff");
     this.container = $(this).getElement('.jframe_padded');
@@ -105,7 +105,7 @@ var Shell = new Class({
     this.jframe.scroller.setOptions({
       duration: 200
     });
-    
+
     // The command-sending request.  We don't need this to be perpetually open,
     // but rather to be something that we can reuse repeatedly to send commands
     // to the subprocess running on the server.
@@ -114,7 +114,7 @@ var Shell = new Class({
       url: '/shell/process_command',
       onSuccess: this.commandProcessed.bind(this)
     });
-    
+
     // Now let's kick off the appropriate thing, either a new shell or a restore.
     if(this.shellId){
       this.startRestore(view);
@@ -122,7 +122,7 @@ var Shell = new Class({
       this.setup(view);
     }
   },
-  
+
   startRestore: function(view){
     this.view = view;
     this.restoreReq = new Request.JSON({
@@ -136,7 +136,7 @@ var Shell = new Class({
       data: 'shellId='+shellId
     });
   },
-  
+
   restoreCompleted: function(json, text){
     this.restoreReq = null;
     if(json.success){
@@ -147,7 +147,7 @@ var Shell = new Class({
       this.restoreFailed();
     }
   },
-  
+
   restoreFailed: function(){
     this.restoreReq = null;
     this.shellId = null;
@@ -160,11 +160,11 @@ var Shell = new Class({
     // Wire up the appropriate handlers
     this.input.addEvent("keypress", this.handleKeyPress.bind(this));
     this.button.addEvent("click", this.sendCommand.bind(this));
-    
+
     // Set up the DOM
     this.container.adopt([this.output, this.input, this.button]);
     this.appendToOutput(initVal);
-    
+
     // Scroll the jframe and focus the input
     this.jframe.scroller.toBottom();
     this.input.focus();
@@ -174,17 +174,17 @@ var Shell = new Class({
 
     // To mimic creation, let's set this.shellCreated to true.
     this.shellCreated = true;
-    
+
     // Register the shell we have with CCS.Desktop, so we can be included in the output channel it has.
     CCS.Desktop.listenForShell(this.shellId, this.nextChunkId, this.outputReceived.bind(this));
   },
-  
+
   focusInput: function(){
     if(!this.input.get("disabled")){
       this.input.focus();
     }
   },
-  
+
   setup: function(view) {
     this.shellCreated = false;
     this.shellTypesReq = new Request.JSON({
@@ -195,7 +195,7 @@ var Shell = new Class({
     });
     this.shellTypesReq.send();
   },
-  
+
   shellTypesReqCompleted: function(json, text){
     this.shellTypesReq = null;
     if(json.success){
@@ -204,25 +204,25 @@ var Shell = new Class({
       this.errorMessage('Error', 'You are not logged in. Please reload your browser window and log in.');
     }
   },
-  
+
   shellTypesReqFailed: function(){
     this.shellTypesReq = null;
     this.errorMessage('Error',"Could not retrieve available shell types. Is the Tornado server running?");
   },
-  
+
   setupTerminalForSelection: function(shellTypes){
     // Wire up the appropriate events
     this.input.addEvent("keypress", this.handleKeyPressForSelection.bind(this));
     this.button.addEvent("click", this.handleShellSelection.bind(this));
-    
+
     // Set up the DOM
     this.container.adopt([this.output, this.input, this.button]);
     this.processShellTypes(shellTypes);
-    
+
     //Scroll to the bottom of the jframe and focus the input.
     this.jframe.scroller.toBottom();
     this.input.focus();
-    
+
     //If the user clicks anywhere in the jframe, focus the textarea.
     this.background.addEvent("click", this.focusInput.bind(this));
   },
@@ -238,7 +238,7 @@ var Shell = new Class({
     this.choicesText += ">";
     this.appendToOutput(this.choicesText);
   },
-  
+
   handleKeyPressForSelection: function(event){
     if(event.key=="enter"){
       this.handleShellSelection();
@@ -250,7 +250,7 @@ var Shell = new Class({
     //returns.
     this.resizeInput.delay(0, this);
   },
-  
+
   resizeInput: function(){
     //In Firefox, we can't resize the textarea unless we first clear its
     //height style property.
@@ -268,7 +268,7 @@ var Shell = new Class({
     var enteredText = this.input.get("value");
     this.appendToOutput(enteredText+"\n");
     this.input.set("value", "");
-    
+
     var selection = parseInt(enteredText);
     if(!selection || selection<=0 || selection > this.choices.length){
       var response = 'Invalid choice: "'+enteredText+'"\n\n'+this.choicesText;
@@ -276,7 +276,7 @@ var Shell = new Class({
       this.input.focus();
       return;
     }
-    
+
     var keyName = this.choices[selection-1];
     this.registerReq = new Request.JSON({
       method: 'post',
@@ -292,15 +292,15 @@ var Shell = new Class({
     // Remove previous events
     this.input.removeEvents('keypress');
     this.button.removeEvents('click');
-    
+
     // Now wire up the appropriate ones
     this.input.addEvent('keypress', this.handleKeyPress.bind(this));
     this.button.addEvent('click', this.sendCommand.bind(this));
-    
+
     // Now scroll to the bottom of the jframe and focus the input.
     this.jframe.scroller.toBottom();
     this.input.focus();
-    
+
     // Register the shell we have with CCS.Desktop so we can be included in its output channel.
     CCS.Desktop.listenForShell(this.shellId, this.nextChunkId, this.outputReceived.bind(this));
   },
@@ -331,7 +331,7 @@ var Shell = new Class({
       this.setupTerminalForShellUsage();
     }
   },
-  
+
   handleKeyPress: function(event){
     if(event.key=="enter"){
       this.sendCommand();
@@ -342,7 +342,7 @@ var Shell = new Class({
     //returns.
     this.resizeInput.delay(0, this);
   },
-  
+
   sendCommand: function(){
     var lineToSend = this.input.get("value");
     var shellId = this.shellId;
@@ -351,7 +351,7 @@ var Shell = new Class({
       data: 'lineToSend='+lineToSend+'&shellId='+shellId
     });
   },
-  
+
   commandProcessed: function(json, text){
     if(json.success){
       this.enableInput();
@@ -369,7 +369,7 @@ var Shell = new Class({
       }
     }
   },
-  
+
   outputReceived: function(json){
     if(json.alive || json.exited){
       this.appendToOutput(json.output);
@@ -389,7 +389,7 @@ var Shell = new Class({
       }
     }
   },
-  
+
   enableInput:function(){
     this.button.set('disabled', false);
     this.input.set({
@@ -399,7 +399,7 @@ var Shell = new Class({
       }
     }).focus();
   },
-  
+
   disableInput:function(){
     this.button.set('disabled', true);
     this.input.set({
@@ -409,13 +409,13 @@ var Shell = new Class({
       }
     }).blur();
   },
-  
+
   errorMessage:function(title, message){
     this.disableInput();
     this.background.setStyle("background-color", "#cccccc");
     this.alert(title, message);
   },
-  
+
   cleanUp:function(){
     //These might not exist any more if they completed already or we quit before they were created.
     if(this.shellTypesReq){

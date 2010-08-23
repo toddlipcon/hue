@@ -27,11 +27,9 @@ import logging
 LOG = logging.getLogger(__name__)
 
 try:
-  unused = BaseException
-except NameError:
-  BaseException = Exception
-else:
-  del unused
+  from exceptions import BaseException
+except ImportError:
+  from exceptions import Exception as BaseException
 
 class Command(NoArgsCommand):
   """Starts the Tornado server."""
@@ -46,7 +44,7 @@ class Command(NoArgsCommand):
     io_loop = tornado.ioloop.IOLoop.instance()
     try:
       io_loop.start()
-    except BaseException, exc:
+    except BaseException:
       LOG.debug("Stopping long-polling server...")
       io_loop.stop()
       LOG.debug("Done")
