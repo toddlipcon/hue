@@ -74,34 +74,10 @@ def build(request):
       return []
 
   def customize_url_for_proxy_server(request, url):
-    #Since we might be running behind a proxy server, the URL might need to be changed. Let's check
-    #the External-Port and External-Addr headers.Because Django rewrites header names for the
-    #dictionary, just replace "External-Port" and "External-Addr" below with whatever you're calling
-    #the custom header. Also update this comment.
-
-    port_header_name = "External-Port"
-    addr_header_name = "External-Addr"
-
-    port_header_to_check = "%s%s" % ("HTTP_", port_header_name.upper().replace('-', '_'))
-    addr_header_to_check = "%s%s" % ("HTTP_", addr_header_name.upper().replace('-', '_'))
-
+    # Since we might be running behind a proxy server, the URL might need to be changed. Rather than
+    # using an absolute URL, let's just use a relative URL, and everything will work automagically.
     url_parts = urlparse.urlsplit(url)
-    net_parts = url_parts[1].split(":")
-    if len(net_parts) == 0:
-      net_parts = {}
-    elif len(net_parts) == 1:
-      net_parts = {"host": net_parts[0]}
-    else:
-      net_parts = {"host": net_parts[0], "port": net_parts[1]}
-
-    port = request.META.get(port_header_to_check, net_parts.get("port", ""))
-    hostname = request.META.get(addr_header_to_check, net_parts.get("host", ""))
-
-    netloc = hostname
-    if port != "":
-      netloc += ":%s" % (port,)
-
-    return urlparse.urlunsplit((url_parts[0], netloc, url_parts[2], url_parts[3], url_parts[4]))
+    return url_parts[2]
 
   all = get("all")
   require = get_arr("require")

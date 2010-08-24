@@ -327,6 +327,7 @@ var Shell = new Class({
       this.shellId = json.shellId;
       this.options.shellId = json.shellId;
       this.nextChunkId = 0;
+      this.output.set("html", "");
       this.enableInput();
       this.setupTerminalForShellUsage();
     }
@@ -395,7 +396,8 @@ var Shell = new Class({
     this.input.set({
       disabled: false,
       styles: {
-        cursor: 'text'
+        cursor: 'text',
+        display: ''
       }
     }).focus();
   },
@@ -405,7 +407,8 @@ var Shell = new Class({
     this.input.set({
       disabled: true,
       styles: {
-        cursor: 'default'
+        cursor: 'default',
+        display: 'none'
       }
     }).blur();
   },

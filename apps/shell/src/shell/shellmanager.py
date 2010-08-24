@@ -56,7 +56,7 @@ class Shell(object):
         subprocess_env[item] = value
     LOG.debug("Subprocess environment is %s" % (subprocess_env,))
     p = subprocess.Popen(shell_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                           shell=True, stderr=subprocess.STDOUT, env=subprocess_env, close_fds=True)
+                           stderr=subprocess.STDOUT, env=subprocess_env, close_fds=True)
 
     # Get the file descriptors
     ifd = p.stdin.fileno()
@@ -365,9 +365,10 @@ class ShellManager(object):
     for item in shell.conf.SHELL_TYPES.keys():
       nice_name = shell.conf.SHELL_TYPES[item].nice_name.get()
       short_name = shell.conf.SHELL_TYPES[item].short_name.get()
-      command = shell.conf.SHELL_TYPES[item].command.get()
       self._cached_shell_types.append({ constants.NICE_NAME: nice_name,
                                         constants.KEY_NAME: short_name })
+      command = shell.conf.SHELL_TYPES[item].command.get()
+      command = [item.strip() for item in command.split(" ")]
       self._cached_shell_info[short_name] = command
     self._cached_shell_types_response = { constants.SUCCESS: True,
                                                      constants.SHELL_TYPES: self.get_shell_types() }
