@@ -609,7 +609,6 @@ CCS.Desktop = {
 	
 	outputReceived: function(json, text){
 	    this.requestOpen = false;
-  	    dbug.log(text);  // TODO: Remove this.
 
 	    var closeOutputChannel = true; // Used to determine if we should issue a new output request.
 	    if(json.periodicResponse){

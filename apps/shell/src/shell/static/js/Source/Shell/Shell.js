@@ -84,7 +84,6 @@ var Shell = new Class({
 
   startShell: function(view){
     // Set up some state shared between "fresh" and "restored" shells.
-
     this.jframe.markForCleanup(this.cleanUp.bind(this));
     this.shellKilled = false;
 
@@ -270,6 +269,11 @@ var Shell = new Class({
     this.input.set("value", "");
 
     var selection = parseInt(enteredText);
+    if(enteredText === "exit" || enteredText ==="quit"){
+      this.shellExited();
+      return;
+    }
+
     if(!selection || selection<=0 || selection > this.choices.length){
       var response = 'Invalid choice: "'+enteredText+'"\n\n'+this.choicesText;
       this.appendToOutput(response);
@@ -345,9 +349,11 @@ var Shell = new Class({
   },
 
   sendCommand: function(){
-    var lineToSend = this.input.get("value");
+    var lineToSend = encodeURIComponent(this.input.get("value"));
     var shellId = this.shellId;
     this.disableInput();
+    dbug.log(lineToSend);
+    dbug.log(escape(" "));
     this.commandReq.send({
       data: 'lineToSend='+lineToSend+'&shellId='+shellId
     });
@@ -376,17 +382,15 @@ var Shell = new Class({
       this.appendToOutput(json.output);
       this.jframe.scroller.toBottom();
       if(json.exited){
-        this.disableInput();
-        this.input.setStyle("display", "none");
-        this.shellKilled = true;
+        this.shellExited();
       }
     }else{
       if(json.noShellExists){
-        this.errorMessage("Error", "The shell no longer exists. Please restart this app.");
+        this.shellExited();
       }else if(json.notLoggedIn){
         this.errorMessage("Error", "You are not logged in. Please log in to use this app.");
       }else if(json.shellKilled){
-        this.errorMessage("Error", "This shell has been killed. Please restart this app.");
+        this.shellExited();
       }
     }
   },
@@ -413,10 +417,20 @@ var Shell = new Class({
     }).blur();
   },
 
-  errorMessage:function(title, message){
+  errorStatus:function(){
     this.disableInput();
     this.background.setStyle("background-color", "#cccccc");
+  },
+  
+  errorMessage:function(title, message){
+    this.errorStatus();
     this.alert(title, message);
+  },
+  
+  shellExited:function(){
+    this.errorStatus();
+    this.appendToOutput("\n[Process completed]");
+    this.shellKilled = true;
   },
 
   cleanUp:function(){
@@ -433,15 +447,20 @@ var Shell = new Class({
     if(this.commandReq){
       this.commandReq.cancel();
     }
-
-    //Tell CCS.Desktop to stop listening for this shellId. Important to do this before
+    
+    //Clear out this.options.shellId and this.shellId, but save the value in a local variable
+    //for the purposes of this function.
+    this.options.shellId = null;
+    var shellId = this.shellId;
+    this.shellId = null;
+    
+    //Tell CCS.Desktop to stop listening for shellId. Important to do this before
     //sending the kill shell request because then the resulting output doesn't cause
     //a non-existent callback to be called.
-    if(this.shellId){
-      CCS.Desktop.stopShellListener(this.shellId);
+    if(shellId){
+      CCS.Desktop.stopShellListener(shellId);
       if(this.shellCreated && !this.shellKilled){
         //A one-time request to tell the server to kill the subprocess if it's still alive.
-        var shellId = this.shellId;
         var req = new Request.JSON({
           method: 'post',
           url: '/shell/kill_shell'

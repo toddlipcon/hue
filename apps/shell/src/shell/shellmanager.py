@@ -32,6 +32,7 @@ import subprocess
 import time
 import tornado.ioloop
 import desktop.lib.i18n
+import pty
 
 LOG = logging.getLogger(__name__)
 
@@ -55,16 +56,12 @@ class Shell(object):
       if value:
         subprocess_env[item] = value
     LOG.debug("Subprocess environment is %s" % (subprocess_env,))
-    p = subprocess.Popen(shell_command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                           stderr=subprocess.STDOUT, env=subprocess_env, close_fds=True)
-
-    # Get the file descriptors
-    ifd = p.stdin.fileno()
-    ofd = p.stdout.fileno()
-
-    # Now set them to nonblocking mode
-    self._set_nonblocking(ifd)
-    self._set_nonblocking(ofd)
+    read_master, read_slave = pty.openpty()
+    write_master, write_slave = pty.openpty()
+    p = subprocess.Popen(shell_command, stdin=write_slave, stdout=read_slave, stderr=read_slave,
+                                             env=subprocess_env, close_fds=True)
+    ifd = write_master
+    ofd = read_master
 
     # State that isn't touched by any other classes.
     self._ifd = ifd
@@ -97,12 +94,11 @@ class Shell(object):
     # when to kill the shell.
     self.time_received = time.time()
 
-  def _set_nonblocking(self, fd):
+  def alive(self):
     """
-    Set the file descriptor passed in to nonblocking mode.
+    Check if the subprocess that powers this shell is still alive.
     """
-    fd_attr = fcntl.fcntl(fd, fcntl.F_GETFL)
-    fcntl.fcntl(fd, fcntl.F_SETFL, fd_attr | os.O_NONBLOCK)
+    return self._subprocess.poll() == None
 
   def get_previous_output(self):
     """
@@ -137,7 +133,9 @@ class Shell(object):
     """
     Register a callback with the global IOLoop for when the child becomes readable.
     """
+    LOG.debug("in here")
     if not self._read_callback_enabled:
+      LOG.debug("had to enable")
       self._io_loop.add_handler(self._ofd, self._child_readable, self._io_loop.READ)
       self._read_callback_enabled = True
 
@@ -422,6 +420,8 @@ class ShellManager(object):
       for key, shell_instance in self._shells.iteritems():
         if shell_instance.last_output_sent or shell_instance.remove_at_next_iteration:
           keys_to_pop.append(key)
+        elif not shell_instance.alive():
+          keys_to_pop.append(key)
         else:
           difftime = current_time - shell_instance.time_received
           if difftime >= constants.SHELL_TIMEOUT:
@@ -488,10 +488,12 @@ class ShellManager(object):
         total_cached_output[shell_id] = { constants.NO_SHELL_EXISTS: True }
 
     if total_cached_output:
+      LOG.debug("Serving output request from cache")
       utils.write(connection, total_cached_output, True)
     else:
       if hue_instance_id in self._output_connections:
-        LOG.warn("Hue Instance ID '%s' already has an output connection, replacing...")
+        LOG.warn("Hue Instance ID '%s' already has an output connection, replacing..." % (hue_instance_id,))
+      LOG.debug("New output connection for Hue InstanceID '%s'" % (hue_instance_id,))
       self._output_connections[hue_instance_id] = TimestampedConnection(connection)
 
   def output_connections_by_ids(self, ids):
