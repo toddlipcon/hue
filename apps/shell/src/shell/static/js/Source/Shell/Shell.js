@@ -84,6 +84,9 @@ var Shell = new Class({
 
   startShell: function(view){
     // Set up some state shared between "fresh" and "restored" shells.
+    this.previousCommands = new Array();
+    this.currentCommandIndex = -1;
+    
     this.jframe.markForCleanup(this.cleanUp.bind(this));
     this.shellKilled = false;
 
@@ -157,7 +160,7 @@ var Shell = new Class({
 
   setupTerminalFromPreviousOutput: function(initVal){
     // Wire up the appropriate handlers
-    this.input.addEvent("keypress", this.handleKeyPress.bind(this));
+    this.input.addEvent("keydown", this.handleKeyDown.bind(this));
     this.button.addEvent("click", this.sendCommand.bind(this));
 
     // Set up the DOM
@@ -211,7 +214,7 @@ var Shell = new Class({
 
   setupTerminalForSelection: function(shellTypes){
     // Wire up the appropriate events
-    this.input.addEvent("keypress", this.handleKeyPressForSelection.bind(this));
+    this.input.addEvent("keydown", this.handleKeyDownForSelection.bind(this));
     this.button.addEvent("click", this.handleShellSelection.bind(this));
 
     // Set up the DOM
@@ -238,7 +241,7 @@ var Shell = new Class({
     this.appendToOutput(this.choicesText);
   },
 
-  handleKeyPressForSelection: function(event){
+  handleKeyDownForSelection: function(event){
     if(event.key=="enter"){
       this.handleShellSelection();
       event.stop();
@@ -294,11 +297,11 @@ var Shell = new Class({
 
   setupTerminalForShellUsage: function(){
     // Remove previous events
-    this.input.removeEvents('keypress');
+    this.input.removeEvents('keydown');
     this.button.removeEvents('click');
 
     // Now wire up the appropriate ones
-    this.input.addEvent('keypress', this.handleKeyPress.bind(this));
+    this.input.addEvent('keydown', this.handleKeyDown.bind(this));
     this.button.addEvent('click', this.sendCommand.bind(this));
 
     // Now scroll to the bottom of the jframe and focus the input.
@@ -336,10 +339,62 @@ var Shell = new Class({
       this.setupTerminalForShellUsage();
     }
   },
+  
+  showPreviousCommand: function(){
+    if(this.currentCommandIndex < 0 || this.currentCommandIndex >= this.previousCommands.length){
+      this.currentCommandIndex = this.previousCommands.length-1;
+    }
+    var oldCommand = this.previousCommands[this.currentCommandIndex];
+    if(oldCommand){
+      this.input.set('value', oldCommand);
+      this.currentCommandIndex--;
+      this.focusInput();
+    }
+  },
+  
+  showNextCommand: function(){
+    if(this.currentCommandIndex < 0 || this.currentCommandIndex >= this.previousCommands.length){
+      this.currentCommandIndex = this.previousCommands.length?0:-1;
+    }
+    var oldCommand = this.previousCommands[this.currentCommandIndex];
+    if(oldCommand){
+      this.input.set('value', oldCommand);
+      this.currentCommandIndex++;
+      this.focusInput();
+    }
+  },
+  
+  handleUpKey: function(){
+    var tempInputValue = this.tempInputValue;
+    this.tempInputValue = null;
+    if(tempInputValue === this.input.get("value")){
+      this.showPreviousCommand();
+    }
+  },
+  
+  handleDownKey: function(){
+    var tempInputValue = this.tempInputValue;
+    this.tempInputValue = null;
+    if(tempInputValue === this.input.get("value")){
+      this.showNextCommand();
+    }
+  },
 
-  handleKeyPress: function(event){
+  handleKeyDown: function(event){
     if(event.key=="enter"){
+      this.recordCommand();
       this.sendCommand();
+    }else if(event.key=="up"){
+      this.tempInputValue = this.input.get("value");
+      // The delay is to deal with a problem differentiating "&" and "up" in Firefox.
+      this.handleUpKey.delay(5, this);
+    }else if(event.key=="down"){
+      this.tempInputValue = this.input.get("value");
+      // The delay is to deal with a problem differentiating "(" and "down" in Firefox.
+      this.handleDownKey.delay(5, this);
+    }else if(event.key=="tab"){
+      //TODO: Provide hook here for what to do with the tab
+      event.stop();
     }
     //If we need to have the textarea grow, we can only do that after the
     //contents of the textarea have been updated. So let's set a timeout
@@ -347,9 +402,19 @@ var Shell = new Class({
     //returns.
     this.resizeInput.delay(0, this);
   },
+  
+  recordCommand: function(){
+    var enteredCommand = this.input.get("value");
+    if(enteredCommand){
+      this.previousCommands.push(enteredCommand);
+      this.currentCommandIndex = this.previousCommands.length - 1;
+    }
+  },
 
   sendCommand: function(){
-    var lineToSend = encodeURIComponent(this.input.get("value"));
+    var enteredCommand = this.input.get("value");
+    var lineToSend = encodeURIComponent(enteredCommand);
+    dbug.log(lineToSend);
     var shellId = this.shellId;
     this.disableInput();
     dbug.log(lineToSend);

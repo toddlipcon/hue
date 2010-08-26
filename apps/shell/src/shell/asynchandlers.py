@@ -108,7 +108,8 @@ class ProcessCommandHandler(shell.middleware.MiddlewareHandler):
       utils.write(self, {constants.NOT_LOGGED_IN: True}, True)
       return
 
-    command = self.get_argument(constants.COMMAND, "")
+    command = self.get_argument(constants.COMMAND, "", strip=False)
+    LOG.debug("Command is : \"%s\"" % (command,))
     shell_id = self.get_argument(constants.SHELL_ID, "")
     smanager = shellmanager.ShellManager.global_instance()
     smanager.command_received(self.django_style_request.user.username, shell_id, command, self)

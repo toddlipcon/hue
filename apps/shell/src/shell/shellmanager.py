@@ -365,8 +365,7 @@ class ShellManager(object):
       short_name = shell.conf.SHELL_TYPES[item].short_name.get()
       self._cached_shell_types.append({ constants.NICE_NAME: nice_name,
                                         constants.KEY_NAME: short_name })
-      command = shell.conf.SHELL_TYPES[item].command.get()
-      command = [item.strip() for item in command.split(" ")]
+      command = shell.conf.SHELL_TYPES[item].command.get().split(" ")
       self._cached_shell_info[short_name] = command
     self._cached_shell_types_response = { constants.SUCCESS: True,
                                                      constants.SHELL_TYPES: self.get_shell_types() }
