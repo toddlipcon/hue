@@ -104,6 +104,8 @@ var Shell = new Class({
       value:'Send command',
       'class':'ccs-hidden'
     });
+    this.input.addEvent("keydown", this.handleKeyDown.bind(this));
+    this.button.addEvent("click", this.sendCommand.bind(this)); //TODO: Pull into declaration
     this.jframe.scroller.setOptions({
       duration: 200
     });
@@ -159,10 +161,6 @@ var Shell = new Class({
   },
 
   setupTerminalFromPreviousOutput: function(initVal){
-    // Wire up the appropriate handlers
-    this.input.addEvent("keydown", this.handleKeyDown.bind(this));
-    this.button.addEvent("click", this.sendCommand.bind(this));
-
     // Set up the DOM
     this.container.adopt([this.output, this.input, this.button]);
     this.appendToOutput(initVal);
@@ -181,6 +179,21 @@ var Shell = new Class({
     CCS.Desktop.listenForShell(this.shellId, this.nextChunkId, this.outputReceived.bind(this));
   },
 
+  setupTerminalForShellUsage: function(){
+    // Set up the DOM
+    this.container.adopt([this.output, this.input, this.button]);
+    
+    // If the user clicks anywhere in the jframe, focus the textarea.
+    this.background.addEvent("click", this.focusInput.bind(this));
+
+    this.shellCreated = true;
+    
+    this.focusInput();
+
+    // Register the shell we have with CCS.Desktop so we can be included in its output channel.
+    CCS.Desktop.listenForShell(this.shellId, this.nextChunkId, this.outputReceived.bind(this));
+  },
+  
   focusInput: function(){
     if(!this.input.get("disabled")){
       this.input.focus();
@@ -201,7 +214,7 @@ var Shell = new Class({
   shellTypesReqCompleted: function(json, text){
     this.shellTypesReq = null;
     if(json.success){
-      this.setupTerminalForSelection(json.shellTypes);
+      this.processShellTypes(json.shellTypes);
     }else if(json.notLoggedIn){
       this.errorMessage('Error', 'You are not logged in. Please reload your browser window and log in.');
     }
@@ -212,45 +225,43 @@ var Shell = new Class({
     this.errorMessage('Error',"Could not retrieve available shell types. Is the Tornado server running?");
   },
 
-  setupTerminalForSelection: function(shellTypes){
-    // Wire up the appropriate events
-    this.input.addEvent("keydown", this.handleKeyDownForSelection.bind(this));
-    this.button.addEvent("click", this.handleShellSelection.bind(this));
-
-    // Set up the DOM
-    this.container.adopt([this.output, this.input, this.button]);
-    this.processShellTypes(shellTypes);
-
-    //Scroll to the bottom of the jframe and focus the input.
-    this.jframe.scroller.toBottom();
-    this.input.focus();
-
-    //If the user clicks anywhere in the jframe, focus the textarea.
-    this.background.addEvent("click", this.focusInput.bind(this));
-  },
-
   processShellTypes: function(shellTypes){
-    this.choices = new Array();
-    this.choicesText = "Please select the shell to start. Your choices are:\n";
+    var table = new Element("table",{
+      styles: {
+        'border-spacing':'5px',
+        'border-collapse':'separate'
+      }
+    });
+    this.container.grab(table);
     for(var i = 0 ; i<shellTypes.length; i++){
-      var choiceLine = (i+1).toString()+". "+shellTypes[i].niceName+"\n";
-      this.choicesText += choiceLine;
-      this.choices.push(shellTypes[i].keyName);
+      var button = new Element('input', {
+        value:shellTypes[i].niceName.escapeHTML(),
+        type:'button',
+        styles: {
+          'font-size':15,
+          padding: 10,
+          margin: 5,
+          position: 'relative'
+        }
+      });
+      button.addEvent('click', this.handleShellSelection.bind(this, [shellTypes[i].keyName]));
+      var td = new Element("td");
+      td.grab(button);
+      var tr = new Element("tr");
+      tr.grab(td);
+      table.grab(tr);
+      this.jframe.applyBehavior("ArtButton", button);
     }
-    this.choicesText += ">";
-    this.appendToOutput(this.choicesText);
   },
 
-  handleKeyDownForSelection: function(event){
-    if(event.key=="enter"){
-      this.handleShellSelection();
-      event.stop();
-    }
-    //If we need to have the textarea grow, we can only do that after the
-    //contents of the textarea have been updated. So let's set a timeout
-    //that gets called as soon as the stack of this event handler
-    //returns.
-    this.resizeInput.delay(0, this);
+  handleShellSelection: function(keyName){
+    this.registerReq = new Request.JSON({
+      method: 'post',
+      url: '/shell/create',
+      onSuccess: this.registerCompleted.bind(this),
+      onFailure: this.registerFailed.bind(this)
+    });
+    this.registerReq.send({ data: "keyName="+keyName });
   },
 
   resizeInput: function(){
@@ -266,52 +277,6 @@ var Shell = new Class({
     this.output.set('html', this.output.get('html')+text.escapeHTML());
   },
 
-  handleShellSelection: function(){
-    var enteredText = this.input.get("value");
-    this.appendToOutput(enteredText+"\n");
-    this.input.set("value", "");
-
-    var selection = parseInt(enteredText);
-    if(enteredText === "exit" || enteredText ==="quit"){
-      this.shellExited();
-      return;
-    }
-
-    if(!selection || selection<=0 || selection > this.choices.length){
-      var response = 'Invalid choice: "'+enteredText+'"\n\n'+this.choicesText;
-      this.appendToOutput(response);
-      this.input.focus();
-      return;
-    }
-
-    var keyName = this.choices[selection-1];
-    this.registerReq = new Request.JSON({
-      method: 'post',
-      url: '/shell/create',
-      onSuccess: this.registerCompleted.bind(this),
-      onFailure: this.registerFailed.bind(this)
-    });
-    this.disableInput();
-    this.registerReq.send({ data: "keyName="+keyName })
-  },
-
-  setupTerminalForShellUsage: function(){
-    // Remove previous events
-    this.input.removeEvents('keydown');
-    this.button.removeEvents('click');
-
-    // Now wire up the appropriate ones
-    this.input.addEvent('keydown', this.handleKeyDown.bind(this));
-    this.button.addEvent('click', this.sendCommand.bind(this));
-
-    // Now scroll to the bottom of the jframe and focus the input.
-    this.jframe.scroller.toBottom();
-    this.input.focus();
-
-    // Register the shell we have with CCS.Desktop so we can be included in its output channel.
-    CCS.Desktop.listenForShell(this.shellId, this.nextChunkId, this.outputReceived.bind(this));
-  },
-
   registerFailed: function(){
     this.registerReq = null;
     this.choices = null;
@@ -321,8 +286,6 @@ var Shell = new Class({
 
   registerCompleted: function(json, text){
     this.registerReq = null;
-    this.choices = null;
-    this.choicesText = null;
     if(!json.success){
       if(json.notLoggedIn){
         this.errorMessage('Error', 'You are not logged in. Please reload your browser window and log in.');
@@ -334,8 +297,8 @@ var Shell = new Class({
       this.shellId = json.shellId;
       this.options.shellId = json.shellId;
       this.nextChunkId = 0;
-      this.output.set("html", "");
-      this.enableInput();
+      this.jframe.collectElement(this.container);
+      this.container.empty();
       this.setupTerminalForShellUsage();
     }
   },
@@ -390,10 +353,9 @@ var Shell = new Class({
       this.handleUpKey.delay(5, this);
     }else if(event.key=="down"){
       this.tempInputValue = this.input.get("value");
-      // The delay is to deal with a problem differentiating "(" and "down" in Firefox.
+      // The delay is to deal with a problem differentiating "(" (left paren) and "down" in Firefox.
       this.handleDownKey.delay(5, this);
     }else if(event.key=="tab"){
-      //TODO: Provide hook here for what to do with the tab
       event.stop();
     }
     //If we need to have the textarea grow, we can only do that after the
