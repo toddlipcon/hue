@@ -150,6 +150,8 @@ var Shell = new Class({
     if(json.success){
       this.view = null;
       this.nextChunkId = json.nextChunkId;
+      this.previousCommands = json.commands;
+      this.currentCommandIndex = this.previousCommands.length - 1;
       this.setupTerminalFromPreviousOutput(json.output);
     }else{
       this.restoreFailed();

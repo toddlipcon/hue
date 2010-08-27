@@ -64,6 +64,7 @@ class Shell(object):
     ofd = read_master
 
     # State that isn't touched by any other classes.
+    self._commands = []
     self._ifd = ifd
     self._ofd = ofd
     self._io_loop = tornado.ioloop.IOLoop.instance()
@@ -99,6 +100,12 @@ class Shell(object):
     Check if the subprocess that powers this shell is still alive.
     """
     return self._subprocess.poll() == None
+
+  def get_previous_commands(self):
+    """
+    Returns a list of the last <=25 commands.
+    """
+    return self._commands
 
   def get_previous_output(self):
     """
@@ -292,6 +299,9 @@ class Shell(object):
     self._write_buffer.seek(len(self._write_buffer.getvalue()))
     self._write_buffer.write("%s\n" % (command,))
     self._write_buffer.seek(0)
+    self._commands.append(command)
+    while len(self._commands) > 25:
+      self._commands.pop(0)
 
   def _read_from_write_buffer(self):
     """
@@ -549,7 +559,9 @@ class ShellManager(object):
     if not shell_instance:
       return { constants.SHELL_KILLED : True }
     output, next_cid = shell_instance.get_previous_output()
-    return { constants.SUCCESS: True, constants.OUTPUT: output, constants.NEXT_CHUNK_ID: next_cid }
+    commands = shell_instance.get_previous_commands()
+    return { constants.SUCCESS: True, constants.OUTPUT: output, constants.NEXT_CHUNK_ID: next_cid, 
+      constants.COMMANDS: commands}
 
   def add_to_output(self, username, hue_instance_id, shell_pairs, connection):
     """
