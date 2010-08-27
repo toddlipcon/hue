@@ -24,6 +24,18 @@
 	position: absolute;
 	top: 27px;
 	left: 3px;
+	cursor: default;
+}
+
+.shell img.plus_button{
+    position: absolute;
+    top: 27px;
+    left: 60px;
+    cursor: pointer;
+}
+
+.shell .fakelink{
+    cursor: pointer;
 }
 
 .shell .fixed_width_font{
@@ -39,4 +51,45 @@
     outline:none;
     padding:0px;
     resize:none;
+}
+
+.shell table{
+    border-spacing:0px 10px;
+    border-collapse: separate;
+    background-color: #ffffff;
+    text-align: center;
+    padding: 0px 10px;
+    margin-left:auto;
+    margin-right:auto;
+    -moz-user-select: none;
+    -webkit-user-select: none;
+}
+
+.shell tr td.left{
+    background-image: url("/shell/static/art/left.png");
+    width:4px;
+}
+
+.shell tr td.right{
+    background-image: url("/shell/static/art/right.png");
+    width:4px;
+}
+
+.shell tr td.middle{
+    font-size:15px;
+    background-image: url("/shell/static/art/middle.png");
+    padding: 0px 15px;
+    height:50px;
+}
+
+.shell tr.button_down td.left{
+    background-image: url("/shell/static/art/left-down.png");
+}
+
+.shell tr.button_down td.middle{
+    background-image: url("/shell/static/art/middle-down.png");
+}
+
+.shell tr.button_down td.right{
+    background-image: url("/shell/static/art/right-down.png");
 }

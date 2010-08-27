@@ -34,7 +34,8 @@ from django.template.defaultfilters import urlencode, escape
     <body>
       % if toolbar:
       <div class="toolbar">
-        <a href="${url('shell.views.index')}"><img src="/shell/static/art/shell.png" class="shell_icon"/></a>
+        <img src="/shell/static/art/shell.png" class="shell_icon"/>
+        <img src="/shell/static/art/plus.png" class="plus_button"/>
       </div>
       % endif
 </%def>

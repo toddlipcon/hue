@@ -83,6 +83,10 @@ var Shell = new Class({
   },
 
   startShell: function(view){
+    $(this).getElement('.plus_button').addEvent("click", function(){ 
+      CCS.Dock.launchApp( { preventDefault: function(){}}, document.getElementById("ccs-shell-menu"), true);
+    });
+    
     // Set up some state shared between "fresh" and "restored" shells.
     this.previousCommands = new Array();
     this.currentCommandIndex = -1;
@@ -226,31 +230,39 @@ var Shell = new Class({
   },
 
   processShellTypes: function(shellTypes){
-    var table = new Element("table",{
-      styles: {
-        'border-spacing':'5px',
-        'border-collapse':'separate'
-      }
-    });
+    this.background.setStyle("background-color","#aaaaaa");
+    var table = new Element("table");
     this.container.grab(table);
     for(var i = 0 ; i<shellTypes.length; i++){
-      var button = new Element('input', {
-        value:shellTypes[i].niceName.escapeHTML(),
-        type:'button',
-        styles: {
-          'font-size':15,
-          padding: 10,
-          margin: 5,
-          position: 'relative'
-        }
+      var tr = new Element("tr", {
+        'class':'fakelink'
       });
-      button.addEvent('click', this.handleShellSelection.bind(this, [shellTypes[i].keyName]));
-      var td = new Element("td");
-      td.grab(button);
-      var tr = new Element("tr");
-      tr.grab(td);
+      var left = new Element("td", {
+        'class':'left'
+      }); 
+      var div = new Element("div");
+      left.grab(div);
+      var middle = new Element("td", {
+        html:shellTypes[i].niceName.escapeHTML(),
+        'class':'middle'
+      });
+      var right = new Element("td", {
+        'class':'right'
+      });
+      div = new Element ("div");
+      right.grab(div);
+      tr.adopt([left, middle, right]);
       table.grab(tr);
-      this.jframe.applyBehavior("ArtButton", button);
+      var boundMouseUp = function(event){ 
+        this.removeClass("button_down"); 
+      }.bindWithEvent(tr);
+      var boundMouseDown = function(event){ 
+        this.addClass("button_down"); 
+      }.bindWithEvent(tr);
+      tr.addEvent('mousedown', boundMouseDown);
+      tr.addEvent('mouseup', boundMouseUp);
+      tr.addEvent('mouseout', boundMouseUp);
+      tr.addEvent('click', this.handleShellSelection.bind(this, [shellTypes[i].keyName]));
     }
   },
 
@@ -293,6 +305,7 @@ var Shell = new Class({
         this.errorMessage('Error', 'Could not create any more shells. Please try again soon.');
       }
     }else{
+      this.background.setStyle("background-color","#ffffff");
       this.shellCreated = true;
       this.shellId = json.shellId;
       this.options.shellId = json.shellId;
