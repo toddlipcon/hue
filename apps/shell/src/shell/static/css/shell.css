@@ -82,14 +82,14 @@
     height:50px;
 }
 
-.shell tr.button_down td.left{
+.shell tr:active td.left{
     background-image: url("/shell/static/art/left-down.png");
 }
 
-.shell tr.button_down td.middle{
+.shell tr:active td.middle{
     background-image: url("/shell/static/art/middle-down.png");
 }
 
-.shell tr.button_down td.right{
+.shell tr:active td.right{
     background-image: url("/shell/static/art/right-down.png");
 }

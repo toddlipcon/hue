@@ -255,15 +255,6 @@ var Shell = new Class({
       right.grab(div);
       tr.adopt([left, middle, right]);
       table.grab(tr);
-      var boundMouseUp = function(event){ 
-        this.removeClass("button_down"); 
-      }.bindWithEvent(tr);
-      var boundMouseDown = function(event){ 
-        this.addClass("button_down"); 
-      }.bindWithEvent(tr);
-      tr.addEvent('mousedown', boundMouseDown);
-      tr.addEvent('mouseup', boundMouseUp);
-      tr.addEvent('mouseout', boundMouseUp);
       tr.addEvent('click', this.handleShellSelection.bind(this, [shellTypes[i].keyName]));
     }
   },
