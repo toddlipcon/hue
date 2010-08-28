@@ -38,7 +38,7 @@ class Command(BaseCommand):
             raise CommandError('Usage is runserver %s' % self.args)
         if not addrport:
             addr = ''
-            port = '7999'
+            port = '8000'
         else:
             try:
                 addr, port = addrport.split(':')
