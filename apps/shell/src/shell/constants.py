@@ -43,6 +43,7 @@ PERIODIC_RESPONSE = "periodicResponse"
 SHELL_CREATE_FAILED = "shellCreateFailed"
 MORE_OUTPUT_AVAILABLE = "moreOutputAvailable"
 NUM_PAIRS = "numPairs"
+RESTART_HUE = "restartHue"
 
 # HTTP Headers used
 HUE_INSTANCE_ID = "Hue-Instance-ID"

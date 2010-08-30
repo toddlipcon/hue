@@ -29,8 +29,8 @@ LOG = logging.getLogger(__name__)
 
 class RetrieveOutputHandler(shell.middleware.MiddlewareHandler):
   """
-  Registers an output connection for the next available output from the subprocesses for the requesting user. Denies access immediately
-  to unauthenticated users and users without existing remote shells.
+  Registers an output connection for the next available output from the subprocesses for the
+  requesting user. Denies access to unauthenticated users and users without existing remote shells.
   """
   @tornado.web.asynchronous
   def post(self):
@@ -39,7 +39,14 @@ class RetrieveOutputHandler(shell.middleware.MiddlewareHandler):
       return
 
     username = self.django_style_request.user.username
-    hue_instance_id = self.request.headers.get_list(constants.HUE_INSTANCE_ID)[0]
+    try:
+      hue_instance_id = self.request.headers.get_list(constants.HUE_INSTANCE_ID)[0]
+    except IndexError:
+      # No Hue instance ID, which is possible if they've had Hue open forever and the server
+      # was upgraded in the meantime.
+      utils.write(self, {constants.RESTART_HUE: True}, True)
+      return
+
     smanager = shellmanager.ShellManager.global_instance()
     shell_pairs = utils.parse_shell_pairs(self)
     smanager.output_request_received(username, hue_instance_id, shell_pairs, self)
@@ -54,7 +61,12 @@ class AddToOutputHandler(shell.middleware.MiddlewareHandler):
       return
 
     username = self.django_style_request.user.username
-    hue_instance_id = self.request.headers.get_list(constants.HUE_INSTANCE_ID)[0]
+    try:
+      hue_instance_id = self.request.headers.get_list(constants.HUE_INSTANCE_ID)[0]
+    except IndexError:
+      # No Hue instance ID, so tell the user to restart Hue (i.e. refresh the browser window).
+      utils.write(self, {constants.RESTART_HUE: True}, True)
+      return
     smanager = shellmanager.ShellManager.global_instance()
     shell_pairs = utils.parse_shell_pairs(self)
     smanager.add_to_output(username, hue_instance_id, shell_pairs, self)
@@ -116,8 +128,8 @@ class ProcessCommandHandler(shell.middleware.MiddlewareHandler):
 
 class RestoreShellHandler(shell.middleware.MiddlewareHandler):
   """
-  Retrieves previous output for the given shell. This is done when we restore a Hue session. Denies access immediately to unauthenticated
-  users and users without existing remote shells.
+  Retrieves previous output for the given shell. This is done when we restore a Hue session. Denies
+  access to unauthenticated users and users without existing remote shells.	
   """
   def post(self):
     if self.deny_hue_access:

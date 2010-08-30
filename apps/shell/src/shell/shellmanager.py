@@ -55,18 +55,19 @@ class Shell(object):
       value = env.get(item)
       if value:
         subprocess_env[item] = value
-    LOG.debug("Subprocess environment is %s" % (subprocess_env,))
-    read_master, read_slave = pty.openpty()
-    write_master, write_slave = pty.openpty()
-    p = subprocess.Popen(shell_command, stdin=write_slave, stdout=read_slave, stderr=read_slave,
-                                             env=subprocess_env, close_fds=True)
-    ifd = write_master
-    ofd = read_master
+
+    master, slave = pty.openpty()
+
+    try:
+      p = subprocess.Popen(shell_command, stdin=slave, stdout=slave, stderr=slave,
+                                                                 env=subprocess_env, close_fds=True)
+    except (OSError, ValueError), err:
+      os.close(master)
+      raise
 
     # State that isn't touched by any other classes.
     self._commands = []
-    self._ifd = ifd
-    self._ofd = ofd
+    self._fd = master
     self._io_loop = tornado.ioloop.IOLoop.instance()
     self._write_callback_enabled = False
     self._read_callback_enabled = False
@@ -133,17 +134,25 @@ class Shell(object):
     Register a callback with the global IOLoop for when the child becomes writable.
     """
     if not self._write_callback_enabled:
-      self._io_loop.add_handler(self._ifd, self._child_writable, self._io_loop.WRITE)
+      if not self._read_callback_enabled:
+        self._io_loop.add_handler(self._fd, self._child_writable, self._io_loop.WRITE)
+      else:
+        self._io_loop.remove_handler(self._fd)
+        self._io_loop.add_handler(self._fd, self._child_writable_or_readable, 
+                                                           self._io_loop.WRITE | self._io_loop.READ)
       self._write_callback_enabled = True
 
   def enable_read_callback(self):
     """
     Register a callback with the global IOLoop for when the child becomes readable.
     """
-    LOG.debug("in here")
     if not self._read_callback_enabled:
-      LOG.debug("had to enable")
-      self._io_loop.add_handler(self._ofd, self._child_readable, self._io_loop.READ)
+      if not self._write_callback_enabled:
+        self._io_loop.add_handler(self._fd, self._child_readable, self._io_loop.READ)
+      else:
+        self._io_loop.remove_handler(self._fd)
+        self._io_loop.add_handler(self._fd, self._child_writable_or_readable,
+                                                           self._io_loop.WRITE | self._io_loop.READ)
       self._read_callback_enabled = True
 
   def disable_read_callback(self):
@@ -151,7 +160,11 @@ class Shell(object):
     Unregister the _child_readable callback from the global IOLoop.
     """
     if self._read_callback_enabled:
-      self._io_loop.remove_handler(self._ofd)
+      if not self._write_callback_enabled:
+        self._io_loop.remove_handler(self._fd)
+      else:
+        self._io_loop.remove_handler(self._fd)
+        self._io_loop.add_handler(self._fd, self._child_writable, self._io_loop.WRITE)
       self._read_callback_enabled = False
 
   def disable_write_callback(self):
@@ -159,7 +172,11 @@ class Shell(object):
     Unregister the _child_writable callback from the global IOLoop.
     """
     if self._write_callback_enabled:
-      self._io_loop.remove_handler(self._ifd)
+      if not self._read_callback_enabled:
+        self._io_loop.remove_handler(self._fd)
+      else:
+        self._io_loop.remove_handler(self._fd)
+        self._io_loop.add_handler(self._fd, self._child_readable, self._io_loop.READ)
       self._write_callback_enabled = False
 
   def mark_for_cleanup(self):
@@ -224,6 +241,8 @@ class Shell(object):
     self._write_buffer.close()
     self._read_buffer.close()
 
+    os.close(self._fd)
+
     try:
       LOG.debug("Sending SIGKILL to process with PID %d" % (self._subprocess.pid,))
       os.kill(self._subprocess.pid, signal.SIGKILL)
@@ -247,7 +266,7 @@ class Shell(object):
     of (output, more_available). The second parameter indicates whether more output might be
     obtained by another call to _read_child_output.
     """
-    ofd = self._ofd
+    ofd = self._fd
     try:
       next_output = os.read(ofd, constants.OS_READ_AMOUNT)
       old_pos = self._read_buffer.tell()
@@ -265,6 +284,16 @@ class Shell(object):
     more_available = len(result) >= constants.OS_READ_AMOUNT
     next_chunk_id = len(self._output_chunk_info)
     return (result, more_available, next_chunk_id)
+
+  def _child_writable_or_readable(self, fd, events):
+    """
+    Called by the IOLoop when we have listened for both writability and readability. Depending on
+    what the events that we have are, call _child_readable or _child_writable or both.
+    """
+    if events & self._io_loop.WRITE:
+      self._child_writable(fd, events)
+    if events & self._io_loop.READ:
+      self._child_readable(fd, events)
 
   def _child_readable(self, fd, events):
     """

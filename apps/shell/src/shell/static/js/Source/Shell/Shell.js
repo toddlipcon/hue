@@ -283,6 +283,7 @@ var Shell = new Class({
         this.selectionButtonDown = true;
         this.currentlySelectedRow = tr;
         tr.addClass('button_down');
+        return false;
       }.bind(this, tr));
       
       // On mouse up, remove the class from the row we're over (might not be the same row as where

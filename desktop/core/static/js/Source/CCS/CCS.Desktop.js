@@ -614,6 +614,10 @@ CCS.Desktop = {
 	    if(json.periodicResponse){
 	        closeOutputChannel = false; // If it's just a "keep-alive", we should reissue.
 	    }
+	    
+	    if(json.restartHue){
+	        alert("Your version of Hue is not up to date. Please refresh your browser.");
+	    }
 
 	    for(var shellId in json){
 	        var shellInfo = this.dispatchInfo[shellId];
@@ -692,6 +696,8 @@ CCS.Desktop = {
 	        if(this.additionalReqs.length){
 	            setTimeout(this.sendAdditionalReq.bind(this), 0);
 	        }
+	    }else if(json.restartHue){
+	        alert("Your version of Hue is not up to date. Please restart your browser.");
 	    }else{
 	        this.numAdditionalReqsSent = 0;
 	        setTimeout(this.sendAdditionalReq.bind(this), 0);

@@ -504,20 +504,22 @@ class _Select(object):
 
 # Choose a poll implementation. Use epoll if it is available, fall back to
 # select() for non-Linux platforms
-#if hasattr(select, "epoll"):
-    # Python 2.6+ on Linux
-#    _poll = select.epoll
-#elif hasattr(select, "kqueue"):
-    # Python 2.6+ on BSD or Mac
-#    _poll = _KQueue
-#else:
-#    try:
-        # Linux systems with our C module installed
-#        import epoll
-#        _poll = _EPoll
-#    except:
-#        # All other systems
-#        import sys
-#        if "linux" in sys.platform:
-#            logging.warning("epoll module not found; using select()")
+
+
+# if hasattr(select, "epoll"):
+#     # Python 2.6+ on Linux
+#     _poll = select.epoll
+# elif hasattr(select, "kqueue"):
+#     # Python 2.6+ on BSD or Mac
+#     _poll = _KQueue
+# else:
+#     try:
+#         # Linux systems with our C module installed
+#         import epoll
+#         _poll = _EPoll
+#     except:
+# #        # All other systems
+#         import sys
+#         if "linux" in sys.platform:
+#             logging.warning("epoll module not found; using select()")
 _poll = _Select
