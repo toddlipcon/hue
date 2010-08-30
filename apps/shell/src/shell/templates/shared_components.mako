@@ -25,7 +25,7 @@
 import datetime
 from django.template.defaultfilters import urlencode, escape
 %>
-<%def name="header(title='Shell', toolbar=True)">
+<%def name="header(title='Hue Shell', toolbar=True)">
   <!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN">
   <html>
     <head>
@@ -35,7 +35,7 @@ from django.template.defaultfilters import urlencode, escape
       % if toolbar:
       <div class="toolbar">
         <img src="/shell/static/art/shell.png" class="shell_icon"/>
-        <img src="/shell/static/art/plus.png" class="plus_button"/>
+        <a target="Shell" data-icon-styles="{'width': 16, 'height': 16}" class="plus_button">New Window</a>
       </div>
       % endif
 </%def>

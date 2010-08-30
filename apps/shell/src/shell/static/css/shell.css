@@ -27,11 +27,13 @@
 	cursor: default;
 }
 
-.shell img.plus_button{
+.shell .plus_button{
     position: absolute;
-    top: 27px;
-    left: 60px;
+    top: 40px;
+    left: 65px;
     cursor: pointer;
+    padding: 7px 7px 7px 23px;
+   	background: url("/static/art/icons/add.png")
 }
 
 .shell .fakelink{
@@ -80,16 +82,17 @@
     background-image: url("/shell/static/art/middle.png");
     padding: 0px 15px;
     height:50px;
+    vertical-align:middle;
 }
 
-.shell tr:active td.left{
+.shell tr.button_down td.left{
     background-image: url("/shell/static/art/left-down.png");
 }
 
-.shell tr:active td.middle{
+.shell tr.button_down td.middle{
     background-image: url("/shell/static/art/middle-down.png");
 }
 
-.shell tr:active td.right{
+.shell tr.button_down td.right{
     background-image: url("/shell/static/art/right-down.png");
 }

@@ -83,9 +83,8 @@ var Shell = new Class({
   },
 
   startShell: function(view){
-    $(this).getElement('.plus_button').addEvent("click", function(){ 
-      CCS.Dock.launchApp( { preventDefault: function(){}}, document.getElementById("ccs-shell-menu"), true);
-    });
+    var newShellButton = $(this).getElement('.plus_button');
+    this.jframe.applyBehavior("ArtButton", newShellButton);
     
     // Set up some state shared between "fresh" and "restored" shells.
     this.previousCommands = new Array();
@@ -220,7 +219,7 @@ var Shell = new Class({
   shellTypesReqCompleted: function(json, text){
     this.shellTypesReq = null;
     if(json.success){
-      this.processShellTypes(json.shellTypes);
+      this.buildSelectionMenu(json.shellTypes);
     }else if(json.notLoggedIn){
       this.errorMessage('Error', 'You are not logged in. Please reload your browser window and log in.');
     }
@@ -231,32 +230,104 @@ var Shell = new Class({
     this.errorMessage('Error',"Could not retrieve available shell types. Is the Tornado server running?");
   },
 
-  processShellTypes: function(shellTypes){
+  buildSelectionMenu: function(shellTypes){
+    // Gray out the background so the list of choices stands out.
     this.background.setStyle("background-color","#aaaaaa");
+    
+    // Let's use a table of buttons. Our ART buttons look especially nice, and a column of
+    // choices in the middle looks nice. Unfortuntately ART buttons can't be easily made of
+    // uniform width, so we'll fake our own. Each button will be a row in the table, and
+    // we'll use cells with special backgrounds to make the rounded corners. Then we'll have 
+    // a middle cell that contains the choice text, properly centered, and the table will make
+    // them all line up nicely.
     var table = new Element("table");
-    this.container.grab(table);
     for(var i = 0 ; i<shellTypes.length; i++){
+      // First let's create the row.
       var tr = new Element("tr", {
         'class':'fakelink'
       });
+      
+      // Now let's make a cell for the left side of the "button".
       var left = new Element("td", {
         'class':'left'
       }); 
+      // In some browsers empty cells don't render properly. Let's use an empty div
+      // inside the cell to avoid this problem.
       var div = new Element("div");
       left.grab(div);
+      
+      // Now we have the middle cell. This is where we put the content.
       var middle = new Element("td", {
         html:shellTypes[i].niceName.escapeHTML(),
         'class':'middle'
       });
+      
+      // And a corresponding cell for the right side of the "button".
       var right = new Element("td", {
         'class':'right'
       });
+      // And an empty div as above.
       div = new Element ("div");
       right.grab(div);
+      
+      // Let's build the tr, and then append it to the table.
       tr.adopt([left, middle, right]);
       table.grab(tr);
-      tr.addEvent('click', this.handleShellSelection.bind(this, [shellTypes[i].keyName]));
+      
+      // Since we're faking buttons, we need to fake the mouse event behavior as well.
+      
+      // On mouse down, add the button_down class to the row, which will change the backgrounds of
+      // the cells inside it. This will make the "button" look depressed. Also store the currently
+      // selected row and set a flag to indicate that a "button" is down.
+      tr.addEvent('mousedown', function(tr){
+        this.selectionButtonDown = true;
+        this.currentlySelectedRow = tr;
+        tr.addClass('button_down');
+      }.bind(this, tr));
+      
+      // On mouse up, remove the class from the row we're over (might not be the same row as where
+      // we started). If it is the same row as where we started, that is a selection. Also clear
+      // the currently selected row and the flag.
+      tr.addEvent('mouseup', function(tr, keyName){
+        tr.removeClass('button_down');
+        this.selectionButtonDown = false;
+        if(this.currentlySelectedRow===tr){
+          this.handleShellSelection(keyName);
+        }
+        this.currentlySelectedRow = null;
+      }.bind(this, [tr, shellTypes[i].keyName]));
+      
+      // When the mouse leaves a row, remove the button_down class so that it looks elevated again.
+      tr.addEvent('mouseout', function(tr){
+        tr.removeClass('button_down');
+      }.bind(this, tr));
+      
+      // When the mouse comes in over a row, add the button_down class, but only if the flag is set
+      // and if the row it was set over is the current row.
+      tr.addEvent('mouseover', function(tr){
+          if(this.selectionButtonDown && this.currentlySelectedRow===tr){
+            tr.addClass('button_down');
+          }
+      }.bind(this, tr));
     }
+    // If we let the mouse up anywhere else, clear the state and remove the button_down class if
+    // necessary.
+    this.background.addEvent('mouseup', function(){
+      if(this.currentlySelectedRow){
+        this.currentlySelectedRow.removeClass('button_down');
+        this.selectionButtonDown = false;
+        this.currentlySelectedRow = null;
+      }
+    }.bind(this));
+    
+    if(Browser.Engine.trident){
+      table.addEvent('selectstart', function(){
+        return false;
+      });
+    }
+    
+    // Now that everything's set up, let's add the table to the container so it can be seen.
+    this.container.grab(table);
   },
 
   handleShellSelection: function(keyName){
