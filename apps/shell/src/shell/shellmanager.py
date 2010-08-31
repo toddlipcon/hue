@@ -66,9 +66,10 @@ class Shell(object):
       raise
 
     # State that isn't touched by any other classes.
+    self._output_buffer_length = 0
     self._commands = []
     self._fd = master
-    self._io_loop = tornado.ioloop.IOLoop.instance()
+    self._io_loop = utils.CustomIOLoop.instance()
     self._write_callback_enabled = False
     self._read_callback_enabled = False
     self._smanager = ShellManager.global_instance()
@@ -83,10 +84,6 @@ class Shell(object):
     # output connections allows us to avoid writing down the same output pipe twice, which would
     # cause an error.
     self._output_connection_ids = set()
-    # Metadata for output reliability. For each chunk of output stores the start and end points
-    # in the read buffer. This is a list of tuples, so the ith element tells us the start and
-    # end points of the ith chunk of output.
-    self._output_chunk_info = []
 
     # State that's accessed by other classes.
     self.shell_id = shell_id
@@ -110,9 +107,10 @@ class Shell(object):
 
   def get_previous_output(self):
     """
-    Called when a Hue session is restored. Returns a tuple of ( all previous output, next chunk id).
+    Called when a Hue session is restored. Returns a tuple of ( all previous output, next offset).
     """
-    return ( self._read_buffer.getvalue(), len(self._output_chunk_info) )
+    val = self._read_buffer.getvalue()
+    return ( val, len(val))
 
   def command_received(self, command, connection):
     """
@@ -185,35 +183,27 @@ class Shell(object):
     """
     self.remove_at_next_iteration = True
 
-  def get_cached_output(self, chunk_id):
+  def get_cached_output(self, offset):
     """
-    The chunk ID is not the latest one, so that chunk of output has already been generated and is
+    The offset is not the latest one, so some output has already been generated and is
     stored in the read buffer. So let's fetch it from there.
     """
-    start_pos = self._output_chunk_info[chunk_id][0]
-    end_pos = self._output_chunk_info[-1][1]
-    old_pos = self._read_buffer.tell()
-    bytes_to_read = end_pos - start_pos
-    self._read_buffer.seek(start_pos)
-    output = self._read_buffer.read(bytes_to_read)
-    self._read_buffer.seek(old_pos)
-    return output
+    self._read_buffer.seek(offset)
+    return self._read_buffer.read()
 
-  def output_request_received(self, hue_instance_id, chunk_id):
+  def output_request_received(self, hue_instance_id, offset):
     """
-    If chunk_id represents an old chunk id, which already has output, returns all cached output
-    since that chunk and the next chunk ID in a dictionary. Chunks are coalesced if the chunk id
-    is more than 1 chunk old, so the returned next chunk ID is not guaranteed to be 1 greater than
-    the one passed in.  If the chunk ID is the latest one, adds listeners and returns None.
+    If offset represents old output, returns all cached output since that offset and the next
+    offset in a dictionary. If the offset is the latest one, adds listeners and returns None.
     """
     self.time_received = time.time()
-    if chunk_id >= len(self._output_chunk_info):
+    if offset >= self._output_buffer_length:
       self.enable_read_callback()
       self._output_connection_ids.add(hue_instance_id)
       return None
-    cached_output = self.get_cached_output(chunk_id)
+    cached_output = self.get_cached_output(offset)
     return { constants.ALIVE: True, constants.OUTPUT: cached_output,
-    constants.MORE_OUTPUT_AVAILABLE: True, constants.NEXT_CHUNK_ID: len(self._output_chunk_info) }
+          constants.MORE_OUTPUT_AVAILABLE: True, constants.NEXT_OFFSET: self._output_buffer_length }
 
   def _output_connection_ids_to_list(self):
     """
@@ -269,9 +259,10 @@ class Shell(object):
     ofd = self._fd
     try:
       next_output = os.read(ofd, constants.OS_READ_AMOUNT)
-      old_pos = self._read_buffer.tell()
+      self._read_buffer.seek(self._output_buffer_length)
       self._read_buffer.write(next_output)
-      self._read_buffer.seek(old_pos)
+      length = len(next_output)
+      self._output_buffer_length += length
     except OSError, e: # No more output at all
       if e.errno == errno.EINTR:
         pass
@@ -279,11 +270,8 @@ class Shell(object):
         format_str = "Encountered error while reading from process with PID %d : %s"
         LOG.error( format_str % (self._subprocess.pid, e))
         self.mark_for_cleanup()
-    result = self._read_buffer.read()
-    self._output_chunk_info.append(( old_pos, self._read_buffer.tell() ))
-    more_available = len(result) >= constants.OS_READ_AMOUNT
-    next_chunk_id = len(self._output_chunk_info)
-    return (result, more_available, next_chunk_id)
+    more_available = length >= constants.OS_READ_AMOUNT
+    return (next_output, more_available, self._output_buffer_length)
 
   def _child_writable_or_readable(self, fd, events):
     """
@@ -301,7 +289,7 @@ class Shell(object):
     read out and then written back over the output connections for this shell.
     """
     LOG.debug("child_readable")
-    total_output, more_available, next_chunk_id = self._read_child_output()
+    total_output, more_available, next_offset = self._read_child_output()
 
     # If this is the last output from the shell, let's tell the JavaScript that.
     if self._subprocess.poll() == None:
@@ -313,7 +301,7 @@ class Shell(object):
     output_conn_id_list = self._output_connection_ids_to_list()
     output_connections = self._smanager.output_connections_by_ids(output_conn_id_list)
     result = { self.shell_id: { status: True, constants.OUTPUT: total_output,
-           constants.MORE_OUTPUT_AVAILABLE: more_available, constants.NEXT_CHUNK_ID: next_chunk_id}}
+              constants.MORE_OUTPUT_AVAILABLE: more_available, constants.NEXT_OFFSET: next_offset} }
     try:
       for output_connection in output_connections:
         utils.write(output_connection, result, True)
@@ -394,8 +382,9 @@ class ShellManager(object):
     self._shells = {} # The keys are (username, shell_id) tuples
     self._meta = {} # The keys here are usernames
     self._output_connections = {} # Keys are Hue Instance IDs, values are wrapped connections
-    self._io_loop = tornado.ioloop.IOLoop.instance()
-    self._periodic_callback = tornado.ioloop.PeriodicCallback(self._handle_periodic, 1000)
+    self._io_loop = utils.CustomIOLoop.instance()
+    self._periodic_callback = tornado.ioloop.PeriodicCallback(self._handle_periodic, 1000, 
+                                                                              io_loop=self._io_loop)
     self._periodic_callback.start()
     self._cached_shell_types = []
     self._cached_shell_info = {}
@@ -515,10 +504,10 @@ class ShellManager(object):
     shell instances.
     """
     total_cached_output = {}
-    for shell_id, chunk_id in shell_pairs:
+    for shell_id, offset in shell_pairs:
       shell_instance = self._shells.get((username, shell_id))
       if shell_instance:
-        cached_output = shell_instance.output_request_received(hue_instance_id, chunk_id)
+        cached_output = shell_instance.output_request_received(hue_instance_id, offset)
         if cached_output:
           total_cached_output[shell_id] = cached_output
       else:
@@ -587,21 +576,21 @@ class ShellManager(object):
     shell_instance = self._shells.get((username, shell_id))
     if not shell_instance:
       return { constants.SHELL_KILLED : True }
-    output, next_cid = shell_instance.get_previous_output()
+    output, next_offset = shell_instance.get_previous_output()
     commands = shell_instance.get_previous_commands()
-    return { constants.SUCCESS: True, constants.OUTPUT: output, constants.NEXT_CHUNK_ID: next_cid, 
+    return { constants.SUCCESS: True, constants.OUTPUT: output, constants.NEXT_OFFSET: next_offset, 
       constants.COMMANDS: commands}
 
   def add_to_output(self, username, hue_instance_id, shell_pairs, connection):
     """
-    Adds the given shell_id, chunk_id pairs to the output connection associated with the given Hue
+    Adds the given shell_id, offset pairs to the output connection associated with the given Hue
     instance ID.
     """
     total_cached_output = {}
-    for shell_id, chunk_id in shell_pairs:
+    for shell_id, offset in shell_pairs:
       shell_instance = self._shells.get((username, shell_id))
       if shell_instance:
-        result = shell_instance.output_request_received(hue_instance_id, chunk_id)
+        result = shell_instance.output_request_received(hue_instance_id, offset)
         if result:
           total_cached_output[shell_id] = result
       else:

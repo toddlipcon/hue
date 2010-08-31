@@ -532,7 +532,7 @@ CCS.Desktop = {
 		else this.healthInstance = CCS.Desktop.launch('Help', data.help);
 	},
 	
-	listenForShell: function(shellId, chunkId, callback){
+	listenForShell: function(shellId, offset, callback){
 	    // One-time initialization
 	    if(!this.requestInitialized){
 	        this.outputReq = new Request.JSON({
@@ -556,12 +556,12 @@ CCS.Desktop = {
             this.dispatchInfo = {};
 	    }
 	    // Register the dispatch information for this shell ID.
-	    this.dispatchInfo[shellId] = {callback:callback, chunkId:chunkId};
+	    this.dispatchInfo[shellId] = {callback:callback, offset:offset};
 	    
 	    // If an output request is already open, use the secondary channel to add the new shell and
-	    // chunk ID to the existing output request.
+	    // offset to the existing output request.
 	    if(this.requestOpen){
-	        this.addToOutputChannel(shellId, chunkId);
+	        this.addToOutputChannel(shellId, offset);
 	    }
 	    
 	    // Otherwise we might be between openOutputChannel calls, so check to see if we've stopped
@@ -589,7 +589,7 @@ CCS.Desktop = {
 	        if(shellInfo){
 	            numShells++;
 	            serializedShells.push("shellId"+numShells+"="+shellId);
-	            serializedShells.push("chunkId"+numShells+"="+shellInfo.chunkId);
+	            serializedShells.push("offset"+numShells+"="+shellInfo.offset);
 	        }
 	    }
 	    serializedShells.push("numPairs="+numShells);
@@ -624,7 +624,7 @@ CCS.Desktop = {
 	        if(shellInfo){
 	            var result = json[shellId];
 	            if(result.alive || result.exited){
-	                shellInfo.chunkId = result.nextChunkId;
+	                shellInfo.offset = result.nextOffset;
 	                if(!(result.alive || result.moreOutputAvailable)){
 	                    this.stopShellListener(shellId);
 	                }
@@ -659,9 +659,9 @@ CCS.Desktop = {
 	    }
 	},
 	
-	addToOutputChannel: function(shellId, chunkId){
+	addToOutputChannel: function(shellId, offset){
 	    // First let's store the info
-	    this.additionalReqs.push({shellId: shellId, chunkId: chunkId});
+	    this.additionalReqs.push({shellId: shellId, offset: offset});
 	    // If there's no request open, let's send it. Otherwise it'll be taken care of in the
 	    // onComplete callback.
 	    if(!this.addToOutputReqOpen){
@@ -675,7 +675,7 @@ CCS.Desktop = {
 	    var serializedData = new Array();
 	    for(var i = 0; i < this.additionalReqs.length; i++){
 	        serializedData.push("shellId"+(i+1)+"="+this.additionalReqs[i].shellId+
-	                            "&chunkId"+(i+1)+"="+this.additionalReqs[i].chunkId);
+	                            "&offset"+(i+1)+"="+this.additionalReqs[i].offset);
 	    }
 	    serializedData.push("numPairs="+this.additionalReqs.length);
 	    return serializedData.join("&");

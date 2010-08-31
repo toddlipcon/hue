@@ -16,13 +16,14 @@
 
 from django.core.management.base import NoArgsCommand
 import desktop.conf
-import desktop.lib.paths
-import logging
-import subprocess
-import select
-import fcntl
 import os
-import signal
+import tornado.web
+import tornado.ioloop
+import tornado.httpserver
+import shell.routing
+import shell.constants
+import shell.utils
+import logging
 
 LOG = logging.getLogger(__name__)
 
@@ -32,33 +33,19 @@ except ImportError:
   from exceptions import Exception as BaseException
 
 class Command(NoArgsCommand):
-  """
-  Run tornado, runserver_plus, and nginx on the ports specified in desktop.conf
-  """
+  """Starts the Tornado server."""
   def handle_noargs(self, **options):
-    django_port = str(desktop.conf.CHERRYPY_PORT.get())
-    path_to_hue = desktop.lib.paths.get_build_dir("env", "bin", "hue")
-    
-    p1 = subprocess.Popen([path_to_hue, "runserver_plus", django_port])
-    p2 = subprocess.Popen([path_to_hue, "runlpserver"])
-    p3 = subprocess.Popen([path_to_hue, "nginx"])
-    
+    port = desktop.conf.TORNADO_PORT.get()
+    for item in shell.constants.PRESERVED_ENVIRONMENT_VARIABLES:
+      if not item in os.environ:
+        LOG.warn("Warning: '%s' is not set. Some apps may not run properly" % (item,))
+    LOG.info("Starting long-polling server on port %d" % (port,))
+    io_loop = shell.utils.CustomIOLoop.instance()
+    application = tornado.web.Application(shell.routing.webapp_params)
+    tornado.httpserver.HTTPServer(application, io_loop=io_loop).listen(port)
     try:
-      p1.wait()
-      p2.wait()
-      p3.wait()
+      io_loop.start()
     except BaseException:
-      LOG.debug("Stopping servers...")
-      try:
-        os.kill(p1.pid, signal.SIGKILL)
-      except OSError:
-        pass
-      try:
-        os.kill(p2.pid, signal.SIGKILL)
-      except OSError:
-        pass
-      try:
-        os.kill(p3.pid, signal.SIGKILL)
-      except OSError:
-        pass
+      LOG.debug("Stopping long-polling server...")
+      io_loop.stop()
       LOG.debug("Done")

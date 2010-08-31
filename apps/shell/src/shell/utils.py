@@ -22,19 +22,33 @@ import shell.constants as constants
 import cStringIO
 import desktop.lib.wsgiserver
 import logging
+import tornado.ioloop
 
 LOG = logging.getLogger(__name__)
 
+class CustomIOLoop(object):
+  def __init__(self):
+    self.ioloop = tornado.ioloop.IOLoop(tornado.ioloop._Select())
+
+  @classmethod
+  def instance(cls):
+    if not hasattr(cls, "_ioloop"):
+      cls._ioloop = cls().ioloop
+    return cls._ioloop
+
 def parse_shell_pairs(connection):
   """
-  Parses out and returns a list of (shell_id, chunk_id) tuples from a descendant of RequestHandler.
+  Parses out and returns a list of (shell_id, offset) tuples from a descendant of RequestHandler.
   """
-  num_pairs = int(connection.get_argument(constants.NUM_PAIRS, ""))
   shell_pairs = []
+  try:
+    num_pairs = int(connection.get_argument(constants.NUM_PAIRS, ""))
+  except ValueError:
+    return shellpairs
   for i in xrange(1, num_pairs+1):
     shell_id_i = connection.get_argument("%s%d" % (constants.SHELL_ID, i), "-1")
-    chunk_id_i = int(connection.get_argument("%s%d" % (constants.CHUNK_ID, i), "-1"))
-    shell_pairs.append((shell_id_i, chunk_id_i))
+    offset_i = int(connection.get_argument("%s%d" % (constants.OFFSET, i), "-1"))
+    shell_pairs.append((shell_id_i, offset_i))
   return shell_pairs
 
 def write(connection, response, finish=False):

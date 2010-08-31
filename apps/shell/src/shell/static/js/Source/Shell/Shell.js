@@ -100,15 +100,20 @@ var Shell = new Class({
       'class':'fixed_width_font'
     });
     this.input = new Element('textarea', {
-      'class':'fixed_width_font'
+      'class':'fixed_width_font',
+      events: {
+        keydown: this.handleKeyDown.bind(this)
+      }
     });
     this.button = new Element('input', {
       type:'button',
       value:'Send command',
-      'class':'ccs-hidden'
+      'class':'ccs-hidden',
+      events: {
+        click: this.sendCommand.bind(this)
+      }
     });
-    this.input.addEvent("keydown", this.handleKeyDown.bind(this));
-    this.button.addEvent("click", this.sendCommand.bind(this)); //TODO: Pull into declaration
+
     this.jframe.scroller.setOptions({
       duration: 200
     });
@@ -148,7 +153,7 @@ var Shell = new Class({
     this.restoreReq = null;
     if(json.success){
       this.view = null;
-      this.nextChunkId = json.nextChunkId;
+      this.nextOffset = json.nextOffset;
       this.previousCommands = json.commands;
       this.currentCommandIndex = this.previousCommands.length - 1;
       this.setupTerminalFromPreviousOutput(json.output);
@@ -181,7 +186,7 @@ var Shell = new Class({
     this.shellCreated = true;
 
     // Register the shell we have with CCS.Desktop, so we can be included in the output channel it has.
-    CCS.Desktop.listenForShell(this.shellId, this.nextChunkId, this.outputReceived.bind(this));
+    CCS.Desktop.listenForShell(this.shellId, this.nextOffset, this.outputReceived.bind(this));
   },
 
   setupTerminalForShellUsage: function(){
@@ -196,7 +201,7 @@ var Shell = new Class({
     this.focusInput();
 
     // Register the shell we have with CCS.Desktop so we can be included in its output channel.
-    CCS.Desktop.listenForShell(this.shellId, this.nextChunkId, this.outputReceived.bind(this));
+    CCS.Desktop.listenForShell(this.shellId, this.nextOffset, this.outputReceived.bind(this));
   },
   
   focusInput: function(){
@@ -374,7 +379,7 @@ var Shell = new Class({
       this.shellCreated = true;
       this.shellId = json.shellId;
       this.options.shellId = json.shellId;
-      this.nextChunkId = 0;
+      this.nextOffset = 0;
       this.jframe.collectElement(this.container);
       this.container.empty();
       this.setupTerminalForShellUsage();
