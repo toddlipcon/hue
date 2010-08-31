@@ -59,7 +59,7 @@ class Command(BaseCommand):
         except AttributeError:
             pass
         runcpserver(args)
-        
+
     def usage(self, subcommand):
         return CPSERVER_HELP
 
@@ -88,7 +88,7 @@ def get_uid_gid(uid, gid=None):
         gid = default_grp
     else:
         try:
-            gid = grp.getgrnam(gid)[2]            
+            gid = grp.getgrnam(gid)[2]
         except KeyError:
             gid = default_grp
     return (uid, gid)
@@ -108,12 +108,12 @@ def start_server(options):
     server = Server(
         (options['host'], int(options['port'])),
         WSGIHandler(),
-        int(options['threads']), 
+        int(options['threads']),
         options['server_name']
     )
     if options['ssl_certificate'] and options['ssl_private_key']:
         server.ssl_certificate = options['ssl_certificate']
-        server.ssl_private_key = options['ssl_private_key']  
+        server.ssl_private_key = options['ssl_private_key']
     try:
         server.bind_server()
         drop_privileges_if_necessary(options)
@@ -132,7 +132,7 @@ def runcpserver(argset=[], **kwargs):
         else:
             k, v = x, True
         options[k.lower()] = v
-    
+
     if "help" in options:
         print CPSERVER_HELP
         return

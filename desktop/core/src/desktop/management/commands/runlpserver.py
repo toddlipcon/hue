@@ -20,9 +20,8 @@ import os
 import tornado.web
 import tornado.ioloop
 import tornado.httpserver
-import shell.routing
-import shell.constants
-import shell.utils
+import desktop.settings
+import desktop.lib.tornado_utils as tornado_utils
 import logging
 
 LOG = logging.getLogger(__name__)
@@ -36,12 +35,9 @@ class Command(NoArgsCommand):
   """Starts the Tornado server."""
   def handle_noargs(self, **options):
     port = desktop.conf.TORNADO_PORT.get()
-    for item in shell.constants.PRESERVED_ENVIRONMENT_VARIABLES:
-      if not item in os.environ:
-        LOG.warn("Warning: '%s' is not set. Some apps may not run properly" % (item,))
     LOG.info("Starting long-polling server on port %d" % (port,))
-    io_loop = shell.utils.CustomIOLoop.instance()
-    application = tornado.web.Application(shell.routing.webapp_params)
+    io_loop = tornado_utils.CustomIOLoop.instance()
+    application = tornado.web.Application(desktop.settings.WEBAPP_PARAMS)
     tornado.httpserver.HTTPServer(application, io_loop=io_loop).listen(port)
     try:
       io_loop.start()

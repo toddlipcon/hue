@@ -25,6 +25,7 @@ import os
 import sys
 import desktop.conf
 import desktop.log
+import desktop.routing
 from desktop.lib.paths import get_desktop_root
 import pkg_resources
 
@@ -249,3 +250,7 @@ DEPENDER_DEBUG = os.getenv("DESKTOP_DEPENDER_DEBUG", "0") not in ["0",""]
 
 # Necessary for South to not futz with tests.  Fixed in South 0.7.1
 SKIP_SOUTH_TESTS = True
+
+############################################################
+# Tornado configuration
+WEBAPP_PARAMS = desktop.routing.webapp_params

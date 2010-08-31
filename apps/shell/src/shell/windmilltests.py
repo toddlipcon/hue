@@ -20,4 +20,4 @@ def test_shell():
   """ launches the default view for shell """
   client = logged_in_client()
   client.click(id='ccs-shell-menu')
-  client.waits.forElement(classname='CCS-SHELL', timeout='2000')  
+  client.waits.forElement(classname='CCS-SHELL', timeout='2000')

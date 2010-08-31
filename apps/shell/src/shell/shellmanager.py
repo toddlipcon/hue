@@ -28,6 +28,7 @@ import signal
 import shell.conf
 import shell.constants as constants
 import shell.utils as utils
+import desktop.lib.tornado_utils as tornado_utils
 import subprocess
 import time
 import tornado.ioloop
@@ -69,7 +70,7 @@ class Shell(object):
     self._output_buffer_length = 0
     self._commands = []
     self._fd = master
-    self._io_loop = utils.CustomIOLoop.instance()
+    self._io_loop = tornado_utils.CustomIOLoop.instance()
     self._write_callback_enabled = False
     self._read_callback_enabled = False
     self._smanager = ShellManager.global_instance()
@@ -120,7 +121,7 @@ class Shell(object):
     LOG.debug("Command received for shell %s : '%s'" % (self, command,))
     if len(self._write_buffer.getvalue()) >= constants.WRITE_BUFFER_LIMIT:
       LOG.debug("Write buffer too full, dropping command")
-      utils.write(connection, { constants.BUFFER_EXCEEDED : True }, True)
+      tornado_utils.write(connection, { constants.BUFFER_EXCEEDED : True }, True)
     else:
       LOG.debug("Write buffer has room. Adding command to end of write buffer.")
       self._append_to_write_buffer(command)
@@ -136,7 +137,7 @@ class Shell(object):
         self._io_loop.add_handler(self._fd, self._child_writable, self._io_loop.WRITE)
       else:
         self._io_loop.remove_handler(self._fd)
-        self._io_loop.add_handler(self._fd, self._child_writable_or_readable, 
+        self._io_loop.add_handler(self._fd, self._child_writable_or_readable,
                                                            self._io_loop.WRITE | self._io_loop.READ)
       self._write_callback_enabled = True
 
@@ -244,11 +245,11 @@ class Shell(object):
     output_conn_id_list = self._output_connection_ids_to_list()
     output_connections = self._smanager.output_connections_by_ids(output_conn_id_list)
     for output_connection in output_connections:
-      utils.write(output_connection, { self.shell_id : { constants.SHELL_KILLED : True }}, True)
+      tornado_utils.write(output_connection, { self.shell_id : { constants.SHELL_KILLED : True }}, True)
 
     while self._prompt_connections:
       prompt_connection = self._prompt_connections.pop()
-      utils.write(prompt_connection, { constants.SHELL_KILLED : True }, True)
+      tornado_utils.write(prompt_connection, { constants.SHELL_KILLED : True }, True)
 
   def _read_child_output(self):
     """
@@ -304,7 +305,7 @@ class Shell(object):
               constants.MORE_OUTPUT_AVAILABLE: more_available, constants.NEXT_OFFSET: next_offset} }
     try:
       for output_connection in output_connections:
-        utils.write(output_connection, result, True)
+        tornado_utils.write(output_connection, result, True)
     finally:
       self.disable_read_callback()
 
@@ -372,7 +373,7 @@ class Shell(object):
     # We have prompt connections to acknowledge that we can receive more stuff. Let's do that.
     while self._prompt_connections:
       prompt_connection = self._prompt_connections.pop()
-      utils.write(prompt_connection, { constants.SUCCESS : True }, True)
+      tornado_utils.write(prompt_connection, { constants.SUCCESS : True }, True)
 
 class ShellManager(object):
   """
@@ -382,8 +383,8 @@ class ShellManager(object):
     self._shells = {} # The keys are (username, shell_id) tuples
     self._meta = {} # The keys here are usernames
     self._output_connections = {} # Keys are Hue Instance IDs, values are wrapped connections
-    self._io_loop = utils.CustomIOLoop.instance()
-    self._periodic_callback = tornado.ioloop.PeriodicCallback(self._handle_periodic, 1000, 
+    self._io_loop = tornado_utils.CustomIOLoop.instance()
+    self._periodic_callback = tornado.ioloop.PeriodicCallback(self._handle_periodic, 1000,
                                                                               io_loop=self._io_loop)
     self._periodic_callback.start()
     self._cached_shell_types = []
@@ -433,7 +434,7 @@ class ShellManager(object):
 
     for key in keys_to_pop:
       connection = self._output_connections.pop(key)
-      utils.write(connection.handler, { constants.PERIODIC_RESPONSE : True }, True)
+      tornado_utils.write(connection.handler, { constants.PERIODIC_RESPONSE : True }, True)
 
   def _handle_periodic(self):
     """
@@ -466,7 +467,7 @@ class ShellManager(object):
     """
     command = self._cached_shell_info.get(key_name)
     if command is None:
-      utils.write(connection, { constants.SHELL_CREATE_FAILED : True })
+      tornado_utils.write(connection, { constants.SHELL_CREATE_FAILED : True })
       return
 
     if not username in self._meta:
@@ -479,13 +480,13 @@ class ShellManager(object):
       shell_instance = Shell(command, shell_id)
     except (OSError, ValueError), exc:
       LOG.error("Could not create shell : %s" % (exc,))
-      utils.write(connection, { constants.SHELL_CREATE_FAILED : True })
+      tornado_utils.write(connection, { constants.SHELL_CREATE_FAILED : True })
       return
 
     LOG.debug("Shell successfully created")
     self._shells[(username, shell_id)] = shell_instance
     shell_instance.shell_id = shell_id
-    utils.write(connection, { constants.SUCCESS : True, constants.SHELL_ID : shell_id })
+    tornado_utils.write(connection, { constants.SUCCESS : True, constants.SHELL_ID : shell_id })
 
   def command_received(self, username, shell_id, command, connection):
     """
@@ -494,7 +495,7 @@ class ShellManager(object):
     """
     shell_instance = self._shells.get((username, shell_id))
     if not shell:
-      utils.write(connection, { constants.NO_SHELL_EXISTS : True }, True)
+      tornado_utils.write(connection, { constants.NO_SHELL_EXISTS : True }, True)
       return
     shell_instance.command_received(command, connection)
 
@@ -516,7 +517,7 @@ class ShellManager(object):
 
     if total_cached_output:
       LOG.debug("Serving output request from cache")
-      utils.write(connection, total_cached_output, True)
+      tornado_utils.write(connection, total_cached_output, True)
     else:
       if hue_instance_id in self._output_connections:
         LOG.warn("Hue Instance ID '%s' already has an output connection, replacing..." % (hue_instance_id,))
@@ -560,7 +561,7 @@ class ShellManager(object):
     """
     Responds with the shell types available.
     """
-    utils.write(connection, self._cached_shell_types_response)
+    tornado_utils.write(connection, self._cached_shell_types_response)
 
   def get_connection_by_hue_id(self, hue_instance_id):
     """
@@ -578,7 +579,7 @@ class ShellManager(object):
       return { constants.SHELL_KILLED : True }
     output, next_offset = shell_instance.get_previous_output()
     commands = shell_instance.get_previous_commands()
-    return { constants.SUCCESS: True, constants.OUTPUT: output, constants.NEXT_OFFSET: next_offset, 
+    return { constants.SUCCESS: True, constants.OUTPUT: output, constants.NEXT_OFFSET: next_offset,
       constants.COMMANDS: commands}
 
   def add_to_output(self, username, hue_instance_id, shell_pairs, connection):
@@ -600,6 +601,6 @@ class ShellManager(object):
       output_connection = self.output_connections_by_ids([hue_instance_id])
       if output_connection:
         output_connection = output_connection[0]
-        utils.write(output_connection, total_cached_output, True)
+        tornado_utils.write(output_connection, total_cached_output, True)
 
-    utils.write(connection, { constants.SUCCESS: True })
+    tornado_utils.write(connection, { constants.SUCCESS: True })

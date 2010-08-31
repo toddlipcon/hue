@@ -23,7 +23,7 @@ import time
 import shell.utils as utils
 import shell.shellmanager as shellmanager
 import shell.constants as constants
-import tornado.ioloop
+import desktop.lib.tornado_utils as tornado_utils
 import threading
 
 import logging
@@ -45,7 +45,7 @@ class IOLoopStopper(threading.Thread):
     while self.output.read() == None:
       if time.time() - start >= self.timeout:
         break
-    tornado.ioloop.IOLoop.instance().stop()
+    tornado_utils.CustomIOLoop.instance().stop()
 
 def test_create():
   """Tests shell creation."""
@@ -58,7 +58,7 @@ def test_create():
   output = utils.TestIO("a")
   helper = IOLoopStopper(output)
   helper.start()
-  tornado.ioloop.IOLoop.instance().start()
+  tornado_utils.CustomIOLoop.instance().start()
   helper.join()
   LOG.debug("Done")
 
@@ -75,7 +75,7 @@ def test_output():
   smanager.output_request_received("a", "", [(shell_id, 0)], output)
   helper = IOLoopStopper(output)
   helper.start()
-  tornado.ioloop.IOLoop.instance().start()
+  tornado_utils.CustomIOLoop.instance().start()
   helper.join()
   LOG.debug(output.read())
   assert_true(shell_id in output.read())
@@ -87,7 +87,7 @@ def test_output():
   output = utils.TestIO("a")
   helper = IOLoopStopper(output)
   helper.start()
-  tornado.ioloop.IOLoop.instance().start()
+  tornado_utils.CustomIOLoop.instance().start()
   helper.join()
   LOG.debug("Done")
 
@@ -103,14 +103,14 @@ def test_input():
   smanager.output_request_received("a", "", [(shell_id, 0)], output)
   helper = IOLoopStopper(output)
   helper.start()
-  tornado.ioloop.IOLoop.instance().start()
+  tornado_utils.CustomIOLoop.instance().start()
   helper.join()
 
   output = utils.TestIO("a")
   smanager.command_received("a", shell_id, "asdf", output)
   helper = IOLoopStopper(output)
   helper.start()
-  tornado.ioloop.IOLoop.instance().start()
+  tornado_utils.CustomIOLoop.instance().start()
   helper.join()
   LOG.debug(output.read())
   assert_true(constants.SUCCESS in output.read(), 'Sending command failed')
@@ -119,7 +119,7 @@ def test_input():
   output = utils.TestIO("a")
   helper = IOLoopStopper(output)
   helper.start()
-  tornado.ioloop.IOLoop.instance().start()
+  tornado_utils.CustomIOLoop.instance().start()
   helper.join()
   LOG.debug("Done")
 
@@ -152,7 +152,7 @@ def test_kill():
                                              (shell_id3, 0)], output)
   helper = IOLoopStopper(output)
   helper.start()
-  tornado.ioloop.IOLoop.instance().start()
+  tornado_utils.CustomIOLoop.instance().start()
   helper.join()
   assert_true( shell_id1 in output.read() or
                shell_id2 in output.read() or
@@ -163,7 +163,7 @@ def test_kill():
                                              (shell_id3, 0)], output)
   helper = IOLoopStopper(output)
   helper.start()
-  tornado.ioloop.IOLoop.instance().start()
+  tornado_utils.CustomIOLoop.instance().start()
   helper.join()
   assert_true( shell_id1 in output.read() and
                shell_id2 in output.read() and
@@ -185,7 +185,7 @@ def test_restore():
   smanager.output_request_received("a", "", [(shell_id, 0)], output)
   helper = IOLoopStopper(output)
   helper.start()
-  tornado.ioloop.IOLoop.instance().start()
+  tornado_utils.CustomIOLoop.instance().start()
   helper.join()
   LOG.debug(output.read())
   assert_true(shell_id in output.read())
