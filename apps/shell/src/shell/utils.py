@@ -31,7 +31,7 @@ def parse_shell_pairs(connection):
   try:
     num_pairs = int(connection.get_argument(constants.NUM_PAIRS, ""))
   except ValueError:
-    return shellpairs
+    return shell_pairs
   for i in xrange(1, num_pairs+1):
     shell_id_i = connection.get_argument("%s%d" % (constants.SHELL_ID, i), "-1")
     offset_i = int(connection.get_argument("%s%d" % (constants.OFFSET, i), "-1"))

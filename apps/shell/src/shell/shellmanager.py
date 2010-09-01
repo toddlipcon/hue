@@ -21,7 +21,6 @@ Shell class itself, but all routing occurs through the ShellManager.
 
 import cStringIO
 import errno
-import fcntl
 import logging
 import os
 import signal
@@ -34,6 +33,7 @@ import time
 import tornado.ioloop
 import desktop.lib.i18n
 import pty
+import tty
 
 LOG = logging.getLogger(__name__)
 
@@ -58,11 +58,15 @@ class Shell(object):
         subprocess_env[item] = value
 
     master, slave = pty.openpty()
-
+    try:
+      tty.setraw(master)
+    except tty.error:
+      LOG.debug("Could not set parent fd to raw mode, user will see echoed input.")
+    
     try:
       p = subprocess.Popen(shell_command, stdin=slave, stdout=slave, stderr=slave,
                                                                  env=subprocess_env, close_fds=True)
-    except (OSError, ValueError), err:
+    except (OSError, ValueError):
       os.close(master)
       raise
 
@@ -244,8 +248,9 @@ class Shell(object):
 
     output_conn_id_list = self._output_connection_ids_to_list()
     output_connections = self._smanager.output_connections_by_ids(output_conn_id_list)
+    result = { self.shell_id : { constants.SHELL_KILLED : True }}
     for output_connection in output_connections:
-      tornado_utils.write(output_connection, { self.shell_id : { constants.SHELL_KILLED : True }}, True)
+      tornado_utils.write(output_connection, result, True)
 
     while self._prompt_connections:
       prompt_connection = self._prompt_connections.pop()
@@ -520,7 +525,7 @@ class ShellManager(object):
       tornado_utils.write(connection, total_cached_output, True)
     else:
       if hue_instance_id in self._output_connections:
-        LOG.warn("Hue Instance ID '%s' already has an output connection, replacing..." % (hue_instance_id,))
+        LOG.warn("Hue Instance ID '%s' already has an output connection" % (hue_instance_id,))
       LOG.debug("New output connection for Hue InstanceID '%s'" % (hue_instance_id,))
       self._output_connections[hue_instance_id] = TimestampedConnection(connection)
 

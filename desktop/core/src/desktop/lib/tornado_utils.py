@@ -15,6 +15,13 @@
 # limitations under the License.
 #
 
+"""
+A mixed bag of utilities that make writing long-polling and real-time Tornado
+components for Hue much easier.  You'll want to use write, MiddlewareHandler,
+and CustomIOLoopGenerator the most. The others are here because they are needed
+for MiddlewareHandler.
+"""
+
 import desktop.lib.wsgiserver
 import django.core.handlers.base
 import django.core.handlers.wsgi
@@ -25,13 +32,6 @@ import logging
 import cStringIO
 
 LOG = logging.getLogger(__name__)
-
-"""
-A mixed bag of utilities that make writing long-polling and real-time Tornado
-components for Hue much easier.  You'll want to use write, MiddlewareHandler,
-and CustomIOLoopGenerator the most. The others are here because they are needed
-for MiddlewareHandler.
-"""
 
 def write(connection, response, finish=False):
   """
@@ -52,6 +52,11 @@ class CustomIOLoop(object):
   """
   @classmethod
   def instance(cls, arg=None):
+    """
+    Returns a global instance of the type of IOLoop requested. Acceptable arguments are:
+    None, tornado.ioloop._Select, tornado.ioloop._Poll, tornado.ioloop._KQueue, and
+    tornado.ioloop._Epoll instances.
+    """
     if not hasattr(cls, "_instances"):
       cls._instances = {}
     if arg:
