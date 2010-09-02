@@ -1,0 +1,122 @@
+# Licensed to Cloudera, Inc. under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.  Cloudera, Inc. licenses this file
+# to you under the Apache License, Version 2.0 (the
+# "License"); you may not use this file except in compliance
+# with the License.  You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+Hue Shell Overview:
+
+Architecture:
+
+The Hue Shell App is composed of the following components:
+
+1. JavaScript "networking center" in CCS.Desktop
+2. Front-end JavaScript
+3. Tornado webserver back-end
+4. Shell Manager module
+5. Other overhead
+
+Terminology:
+
+Hue Server: Prior versions of Hue used to have only one server, namely either the 
+CherryPy webserver in production or the Werkzeug-enabled server in 
+development mode.  This WSGI-compliant webserver serves up the Django
+webapp fondly known as Hue (formerly Cloudera Desktop). In this document,
+the WSGI-compliant server is referred to as "the Hue server".
+
+Long-polling Server: To manage (potentially) thousands of concurrent clients, we
+use the Tornado web server as a second server.  Unlike the Hue server, which is 
+a blocking, potentially multithreaded server, the Tornado server, also known as the "long-polling
+server", is an asynchronous single-threaded server.
+
+Long-polling: Long polling is an HTTP-based server-push programming technique. The browser keeps
+making AJAX requests to the server, which delays responding until it has something to send back
+to the browser.  By continually making a new request when the previous one completes, the browser
+provides a pipe which the server can use to send output as it becomes available.
+
+Pseudo-TTY: Some of the backends we support (such as the HBase shell, for example) change their
+behavior when they detect that their output is not to a terminal but rather to a pipe. In order to
+overcome this shortcoming, we talk to the subprocesses through a pseudo-terminal, known as a 
+pseudo-TTY or pty.
+
+Architecture:
+
+1. "Networking center"
+
+Inside CCS.Desktop, a global object, there's a new set of functions, which will be pulled out into
+its own global object eventually, that allow for a single point of communication with the Hue 
+server.
+
+When Hue starts up, after everything has loaded, there are no open requests. Once the Hue Shell
+app has been opened, and the user selects a shell type that he/she would like, that instance of the
+app tells CCS.Desktop to listen for its shell, and CCS.Desktop opens an output request.  
+The server will not respond to that request until there is output to report.
+
+When future instances of the app open up, they tell CCS.Desktop to listen for their instance as well,
+but rather than open a new channel for output, CCS.Desktop sends a short-lived request to the server
+to tell it that the currently open request can be used for output from the second shell as well.
+
+When the server responds, CCS.Desktop calls the appropriate callbacks on the shell instances, so 
+that each of the shells that has output can receive output at the same time. It then reissues a
+request for the shells which are still alive.
+
+Because of browser limitations, requests are cancelled at 60 seconds, so once an open request is 55
+seconds old, the server responds with a "keep-alive" message, and the client reissues the request.
+
+2. Front-end JavaScript
+
+The Hue Shell-proper JavaScript serves to emulate the look and feel of a classic Unix terminal as
+much as possible. When the app is launched, it asks the server for the available shell types. This
+allows for quitting the JavaScript app, restarting just the Tornado server, and relaunching the
+JavaScript app to get updated shell types.
+
+After the shell types have been received, the JS constructs a menu for the user to choose a shell
+type from.  The JS sets a listener on the whole window such that clicking anywhere in the window
+focuses the command line, which is actually a textarea without an outline.
+
+When the user hits enter, a listener fires and sends the current contents of the textarea to the
+Tornado server.  The command is written into the relevant shell's stdin whenever the shell next
+becomes writable.
+
+3. Tornado webserver
+
+The Tornado webserver is a single-threaded webserver that processes requests asynchronously so that
+it can handle a high number of requests. The idea behind Tornado is that everything that is slow is 
+kicked off and the appropriate response is delivered when the slow thing is done, but in the meantime
+other requests are served as well.
+
+Tornado's web server is a giant infinite loop that does a select() on file descriptors. Typically,
+some of these file descriptors are for incoming requests, and a few are for these asynchronous processing
+jobs that have been kicked off.  Whenever one of these file descriptors is readable, Tornado either
+handles the incoming request or processes the output from the kicked-off job.
+
+One big challenge for us is how to integrate out standard Django middleware into Tornado. Thankfully
+Tornado is also written in Python, so it is quite simple to import our middleware and run it on every
+request to determine if something special needs to be done.  There is a lot to talk about here, but
+this is a solved problem - just have your Tornado request handlers subclass from 
+desktop.lib.tornado_utils.MiddlewareHandler instead of tornado.web.RequestHandler.  The only added
+requirement is that your handler should deny access to Hue if self.deny_hue_access is set to True - 
+it is set to False otherwise.
+
+4. shellmanager module
+
+The shellmanager module is the engine of the Hue Shell app. All incoming requests are routed to
+a global ShellManager object, which deals with the requests as follows:
+
+1. /shell/get_shell_types - returns a JSON array of available shell types
+2. /shell/create_shell - attempts to create a subprocess of the specified type
+3. /shell/retrieve_output - ASYNCHRONOUS - responds to Hue instance when one of the shells that the 
+   request specifies has output.
+4. /shell/process_command - stores the specified command into a write buffer, and returns either success/failure.
+  The command is written into the subprocess's stdin when it becomes writable.
+5. /shell/kill_shell. Marks the specified shell to be killed and cleaned up at the next iteration of the global IOLoop.
