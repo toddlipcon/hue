@@ -269,6 +269,12 @@ class Shell(object):
       self._read_buffer.write(next_output)
       length = len(next_output)
       self._output_buffer_length += length
+      num_excess_chars = self._output_buffer_length - shell.conf.SHELL_BUFFER_AMOUNT.get()
+      if num_excess_chars > 0:
+        self._read_buffer.seek(num_excess_chars)
+        newval = self._read_buffer.read()
+        self._read_buffer.truncate(0)
+        self._read_buffer.write(newval)
     except OSError, e: # No more output at all
       if e.errno == errno.EINTR:
         pass

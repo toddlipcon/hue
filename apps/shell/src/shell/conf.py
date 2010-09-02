@@ -28,3 +28,9 @@ SHELL_TYPES = UnspecifiedConfigSection(
                                command=Config(key='command', required=True),
                                short_name=Config(key='short_name', required=True),
                                help_doc=Config(key='help', required=False))))
+
+SHELL_BUFFER_AMOUNT = Config(
+  key="shell_buffer_amount",
+  help="Configure the number of output characters buffered for each shell",
+  default=524288,
+  type=int)
