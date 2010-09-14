@@ -145,14 +145,14 @@ Swiff.Uploader = new Class({
 			
 			// button interactions, relayed to to the target
 			this.addEvents({
-				buttonEnter: this.targetRelay.bind(this, ['mouseenter']),
-				buttonLeave: this.targetRelay.bind(this, ['mouseleave']),
-				buttonDown: this.targetRelay.bind(this, ['mousedown']),
-				buttonDisable: this.targetRelay.bind(this, ['disable'])
+				buttonEnter: this.targetRelay.bind(this, 'mouseenter'),
+				buttonLeave: this.targetRelay.bind(this, 'mouseleave'),
+				buttonDown: this.targetRelay.bind(this, 'mousedown'),
+				buttonDisable: this.targetRelay.bind(this, 'disable')
 			});
 			
 			this.reposition();
-			window.addEvent('resize', this.reposition.bind(this, []));
+			window.addEvent('resize', this.reposition.bind(this));
 		} else {
 			this.parent(path);
 		}
@@ -250,7 +250,7 @@ Swiff.Uploader = new Class({
 		// update coordinates, manual or automatically
 		coords = coords || (this.target && this.target.offsetHeight)
 			? this.target.getCoordinates(this.box.getOffsetParent())
-			: {top: window.getScrollTop(), left: 0, width: 40, height: 40}
+			: {top: window.getScrollTop(), left: 0, width: 40, height: 40};
 		this.box.setStyles(coords);
 		this.fireEvent('reposition', [coords, this.box, this.target]);
 	},

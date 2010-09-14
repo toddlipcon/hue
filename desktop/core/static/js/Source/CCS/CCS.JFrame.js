@@ -534,7 +534,7 @@ CCS.JFrame = new Class({
 		content - (*object*) optional object containing various metadata about the content; js tags, meta tags, title, view, etc. See the "notes" section of the renderContent method comments in this file.
 	*/
 	applyFilter: function(name, container, content){
-		dbug.conditional(this.filters[name].bind(this, [container, content]), function(e) {
+		dbug.conditional(this.filters[name].pass([container, content], this), function(e) {
 			dbug.error('filter failed, name %s, error: ', name, e);
 		});
 	},
@@ -591,7 +591,7 @@ CCS.JFrame = new Class({
 	*/
 
 	invokeLinker: function(selector, element, event){
-		dbug.conditional(this.linkers[selector].bind(this, [event, element]), function(e) {
+		dbug.conditional(this.linkers[selector].pass([event, element], this), function(e) {
 			dbug.error('linker failed, selector %s, error: ', selector, e);
 		});
 	},

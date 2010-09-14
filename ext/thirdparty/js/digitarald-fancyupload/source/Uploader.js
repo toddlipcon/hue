@@ -52,10 +52,10 @@ var Uploader = new Class({
 		this.box.inject(this.options.container || document.body);
 
 		this.addEvents({
-			buttonEnter: this.targetRelay.bind(this, ['mouseenter']),
-			buttonLeave: this.targetRelay.bind(this, ['mouseleave']),
-			buttonDown: this.targetRelay.bind(this, ['mousedown']),
-			buttonDisable: this.targetRelay.bind(this, ['disable'])
+			buttonEnter: this.targetRelay.bind(this, 'mouseenter'),
+			buttonLeave: this.targetRelay.bind(this, 'mouseleave'),
+			buttonDown: this.targetRelay.bind(this, 'mousedown'),
+			buttonDisable: this.targetRelay.bind(this, 'disable')
 		});
 
 		this.uploading = 0;

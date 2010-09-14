@@ -200,7 +200,7 @@ CCS.Desktop = {
 		this.instances[component].include(instance);
 		//on destroy, remove the instance from the list of instances
 		//add CCS-<COMPONENT> - mostly just used for selecting apps in windmill.
-		instance.addEvent('destroy', this.removeInstance.bind(this, [component, instance]));
+		instance.addEvent('destroy', this.removeInstance.pass([component, instance], this));
 		$(instance).addClass('CCS-'+component.toUpperCase());
 		instance.inject($('ccs-desktop'));
 	},

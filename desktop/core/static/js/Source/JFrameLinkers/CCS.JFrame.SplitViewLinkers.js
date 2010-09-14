@@ -44,7 +44,7 @@ CCS.JFrame.addGlobalLinkers({
 		for (key in resize) {
 			if (sides.contains(key)) side = key;
 		}
-		widget.fold(side, resize[side], resize.hideSplitter).chain(partialPostFold.bind(this, [resize, e, link]));
+		widget.fold(side, resize[side], resize.hideSplitter).chain(partialPostFold.pass([resize, e, link], this));
 	},
 
 	'[data-splitview-toggle]': function(e, link){
@@ -53,7 +53,7 @@ CCS.JFrame.addGlobalLinkers({
 		if (!widget) return;
 		var resize = link.get('data', 'splitview-toggle', true);
 		if (!resize) return;
-		widget.toggle(resize.side, resize.hideSplitter).chain(partialPostFold.bind(this, [resize, e, link]));
+		widget.toggle(resize.side, resize.hideSplitter).chain(partialPostFold.pass([resize, e, link], this));
 	}
 
 });
