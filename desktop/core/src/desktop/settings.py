@@ -224,7 +224,6 @@ def prep_depender_config():
     "../ext/thirdparty/js/mootools-table/package.yml",
     "../ext/thirdparty/js/mootools-color/package.yml",
     "../ext/thirdparty/js/art-widgets/package.yml",
-    "../ext/thirdparty/js/slick/package.yml",
     "core/static/js/package.yml",
     "../ext/thirdparty/js/depender/package.yml",
     "../ext/thirdparty/js/fittext/package.yml"
