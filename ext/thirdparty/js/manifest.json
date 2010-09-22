@@ -11,9 +11,21 @@
 		}
 	},
 	"projects": {
-		"mootools-core": { "track-indirect": "mootools-core.hash" },
-		"mootools-more": { "track-indirect": "mootools-more.hash" },
-		"art": { "track-indirect": "art.hash" },
+		"mootools-core": {
+			"track-indirect": "mootools-core.hash",
+			"from-remote": "anutron",
+			"remotes": ["anutron"]
+		 },
+		"mootools-more": {
+			"track-indirect": "mootools-more.hash",
+			"from-remote": "anutron",
+			"remotes": ["anutron"]
+		},
+		"art": {
+			"track-indirect": "art.hash",
+			"from-remote": "anutron",
+			"remotes": ["anutron"]
+		},
 		"clientcide": { "track-indirect": "clientcide.hash" },
 
 		"mootools-color": {
@@ -32,12 +44,6 @@
 
 		"art-widgets": {
 			"track-indirect": "art-widgets.hash",
-			"from-remote": "origin",
-			"remotes": ["origin"]
-		},
-
-		"slick": {
-			"track-indirect": "slick.hash",
 			"from-remote": "anutron",
 			"remotes": ["anutron"]
 		}
