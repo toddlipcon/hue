@@ -28,6 +28,22 @@ script: CCS.JFrame.PartialRefresh.js
 
 	CCS.JFrame.addGlobalRenderers({
 
+		/*
+			Example w/ partials, container, and lines
+			<tbody data-partial-container-id="tbody1">
+				<tr data-partial-line-id="tr1">
+					<td data-partial-id="id1"></td>
+					<td data-partial-id="id2"></td>
+				</tr>
+			</tbody>
+
+			Example w/ just partials and container
+			<div data-partial-container-id="div1">
+				<p data-partial-id="p1">foo</p>
+				<p data-partial-id="p2">bar</p>
+			</div>
+		*/
+
 		partialRefresh: function(content){
 			var options = content.options;
 			//when we load content via ajax, we don't want the response being parsed for partials
@@ -50,7 +66,7 @@ script: CCS.JFrame.PartialRefresh.js
 			var partials = getPartials(new Element('div').adopt(partialContainers), true);
 			//if the options aren't defined or if we didn't auto refresh, reset and
 			//return (fall through to other renderers)
-			if (!options || !options.autorefreshed || 
+			if (!(options && options.autorefreshed) &&
 					//or if the last time we loaded we stored partials but the url has changed
 					//(i.e. a new page is loaded, this one also having partials)
 					(jState.prevPath != options.responsePath && !options.forcePartial)) {
@@ -61,65 +77,186 @@ script: CCS.JFrame.PartialRefresh.js
 				this.disableSpinnerUsage();
 				return;
 			}
-			
+
 			if (new URI(options.requestPath).toString() != new URI(options.responsePath).toString()) {
-				if (enableLog) dbug.warn('detected partial refresh on a possible redirect (the request path != the response path), continuing with partial refresh');
+				if (enableLog) dbug.warn('detected partial refresh on a possible redirect (the request path (%s) != the response path (%s)), continuing with partial refresh', new URI(options.requestPath).toString(), new URI(options.responsePath).toString());
 			}
 			setPrevPath();
 
 			//don't show the spinner for partial refreshes
 			this.disableSpinnerUsage();
 
-			//check that the old partials are present in the new ones
-			//and that all the new ones are present in the old ones
-			//if not, store the new state and fall through to other renderers
-			var checked = checkPartials(jState.partials, partials);
-			if (checked.spoiled) {
-				if (enableLog) dbug.log('checked partials spoiled, setup and return');
-				//TODO tell the user that their state has spoiled and then update
-				jState.partials = partials;
-				//fall through to other renderers
-				return;
-			}
-			
 			/*******************************
 			FORM HERE ON OUT
 			this filter will handle the response; we return true and other renderers are excluded
+			UNLESS there is a partial returned that we cannot find the proper place to put it
+			(i.e. it has no partial-container).
 			*******************************/
-			
+			if (enableLog) dbug.log('proceeding with partial refresh');
 			//store the path as the current one
 			this.currentPath = options.responsePath || this.currentPath;
-			
-			//if there's something to update...
-			if (checked.update.length > 0) {
-				//apply the JFrame filters to the response
-				//but only to the elements require updating
-				//this requires some foresight on how you apply the partials
-				//if your partial contains a filter and that filter expects
-				//the rest of the response to be around it, it's not going to be
-				//only the children of each section marked as a partial can be relied upon
-				//to be in this DOM structure when we apply the filters.
-				var pElements = new Elements(checked.update.map(function(id){ return partials[id]; }));
-				var target = new Element('div').adopt(pElements);
-				content.elements = pElements;
-				this.applyFilters(target, content);
-				//get the partials from the target now that they've been set up with the filters
-				partials = getPartials(target);
-				//update the items that require it
-				if (enableLog) dbug.log('updating partial refresh items (%s)', checked.update.length);
-				checked.update.each(function(id){
-					//replace the element
-					partials[id].replaces(jState.partials[id]);
-					//destroy the old one from memory (garbage collection)
-					jState.partials[id].destroy();
-					//update the pointer to the new one
-					jState.partials[id] = partials[id];
-				}, this);
-			} else {
+
+			//this method destroys a partial given its partial id
+			var destroy = function(id){
+				//get the element
+				var element = jState.partials[id];
+				//clean up its behaviors
+				this.behavior.cleanup(element);
+				//destroy the element
+				element.destroy();
+				//delete it from the jState
+				delete jState.partials[id];
+			}.bind(this);
+
+			var checkedPartials = {},
+			    update = false,
+			    renderedIds = {},
+			    renderedPartials = new Elements(),
+			    partialClones = {},
+			    target = new Element('div');
+			//loop through the partials and figure out which ones need updating so that we can 
+			//run only those through the filters
+			partials.each(function(partial, id) {
+				if (enableLog) dbug.log('considering %s for update', id);
+				//get the corresponding element in the dom
+				var before = jState.partials[id];
+				//if there isn't one, or thier raw html don't match, we'll update it, so we must render it
+				if (!before || !compare(before, partial)) {
+					if (enableLog) dbug.log('preparing %s for update', id);
+					//we must preserve the DOM structure to be able to find partial containers and partial lines
+					//so clone the partial for rendering
+					var clone = partial.clone(true, true);
+					target.adopt(clone);
+					renderedPartials.push(clone);
+					renderedIds[id] = true;
+					//store a reference to the clone
+					partialClones[id] = clone;
+				}
+			});
+			//render the content
+			if (!renderedPartials.length) {
+				if (enableLog) dbug.log('no partials for render; exiting quietly');
 				//if we aren't updating anything, that's cool, but still call the autorefresh filter
 				//to ensure that the frame keeps refreshing
 				this.applyFilter('autorefresh', new Element('div'), content);
+				//if there is no new content, return true (so no other renderers are called)
+				return true;
 			}
+
+			//apply all the jframe magic to our filtered content
+			if (enableLog) dbug.log('applying filters');
+			content.elements = renderedPartials;
+			this.applyFilters(target, content);
+
+			//now loop through the partials again and inject them into the DOM structure from the response
+			//replacing the original partial with the cloned one
+			partials.each(function(partial, id){
+				if (enableLog) dbug.log('replacing target with clone');
+				var clone = partialClones[id];
+				if (clone) {
+					//because we're replacing, we need to copy over thier original HTML state for the checksum
+					clone.store('partialRefresh:unaltered', partial.retrieve('partialRefresh:unaltered'));
+					clone.replaces(partial);
+					//and then update the pointer as the clone is now the rendered partial
+					partials[id] = clone;
+				}
+			});
+
+			var prevId;
+			if (enableLog) dbug.log('iterating over partials for injection');
+			//iterate over all the partials to inject them into the live DOM
+			partials.each(function(partial, id){
+				if (enableLog) dbug.log('considering %s for injection', id);
+				//if it's in a line that's been injected, skip it
+				if (!partial.retrieve('partialRefresh:inserted')) {
+					//if it was passed through the renderers, it means that it needs an update or insertion
+					if (renderedIds[id]) {
+						//get the corresponding partial in the DOM
+						var before = jState.partials[id];
+						//if there's a corresponding partial already in the DOM, replace it
+						if (before) {
+							if (enableLog) dbug.log('performing update for %s', id);
+							partial.replaces(before);
+							destroy(id);
+						} else {
+							//else it's not in the DOM
+							//look to see if this partial is in a line item (for example, the tr for a td that is a partial)
+							var line = getPartialLine(partial);
+							//if there is no line, inject it into the DOM in the container
+							if (!line) {
+								if (prevId) {
+									if (enableLog) dbug.log('injecting line for %s after previous item (%s)', id, prevId);
+									//if this isn't the first one, inject it after the previous id
+									partial.inject(jState.partials[prevId], 'after');
+								} else {
+									//find the container and inject it as the first item there
+									var containers = getPartialContainers(partial, this);
+									if (containers.DOMcontainer) {
+										if (enableLog) dbug.log('injecting %s into top of container (%o)', id, containers.DOMcontainer);
+										partial.inject(containers.DOMcontainer, 'top');
+									} else {
+										//else, we don't know where to inject it
+										dbug.warn('Could not inject partial (%o); no container or previous item found.', partial);
+										//fall through to other renderers (i.e. refresh the whole view)
+										return;
+									}
+								}
+							} else {
+								if (enableLog) dbug.log('preparing line for injection');
+								//there is a line, so we inject it instead of the partial
+
+								//get the previous line (from the response)
+								var prevLine = line.getPrevious('[data-partial-line-id]'),
+								    prevLineInDOM;
+								//now find it's counterpart in the live DOM
+								if (prevLine) prevLineInDOM = $(this).getElement('[data-partial-line-id=' + prevLine.get('data', 'partial-line-id') + ']');
+								//if it's there, inject this line after it
+								if (prevLineInDOM) {
+									if (enableLog) dbug.log('injecting line (%o) after previous line (%o)', line, prevLine);
+									line.inject(prevLineInDOM, 'after');
+								} else {
+									//else this is the first line, so inject it at the top of the container
+									var lineContainers = getPartialContainers(partial, this);
+									if (lineContainers.DOMcontainer) {
+										if (enableLog) dbug.log('injecting line (%o) into top of container (%o)', line, lineContainers.DOMcontainer);
+										line.inject(lineContainers.DOMcontainer, 'top');
+									} else {
+										//else, we don't know where to inject it
+										dbug.warn('Could not inject partial (%o) in line (%o); no container or previous item found.', partial, line);
+										//fall through to other renderers (i.e. refresh the whole view)
+										return;
+									}
+								}
+								//store the fact that we just injected all the partials in this line
+								line.getElements('[data-partial-id]').store('partialRefresh:inserted', true);
+							}
+						}
+					}
+				}
+				jState.partials[id] = partial;
+				prevId = id;
+			}, this);
+			//for any partials that were in the DOM but not in the response, remove them
+			var destroyLine = function(line){
+				if (enableLog) dbug.log('destroying line:', line);
+				this.behavior.cleanup(line);
+				line.destroy();
+			}.bind(this);
+
+			var prevLine;
+			for (id in jState.partials) {
+				if (!partials[id]) {
+					var line = getPartialLine(jState.partials[id]);
+					if (enableLog) dbug.log('destroying %s', id, line);
+					destroy(id);
+					if (prevLine && line != prevLine) destroyLine(prevLine);
+					prevLine = line;
+				}
+			}
+			if (prevLine) destroyLine(prevLine);
+
+			//we've updated the display, so tell filters that are waiting that they may need to update their display, too
+			this.behavior.fireEvent('show');
 			//prevent other renderers from handling the response
 			return true;
 		}
@@ -151,40 +288,30 @@ script: CCS.JFrame.PartialRefresh.js
 			//if instructed to, store the original state of the response before it was altered by any filter
 			if (store) partial.store('partialRefresh:unaltered', partial.innerHTML);
 		});
-		return partials;
+		return $H(partials);
 	};
 
-	//checks two collections of partials to see if they are equal
-	//that each group has the same number of partials
-	//that the ids match up and, in addition, that the content 
-	//returned has updated or not
-	var checkPartials = function(partials1, partials2) {
-		var keys = $H(partials1).getKeys();
-		keys.combine($H(partials2).getKeys());
-		
-		var result = {
-			update: [],
-			spoiled: false
+	//given a partial, attempts to find the line it is in
+	//example: for a td that is a partial, it may have the tr as its line
+	var getPartialLine = function(partial){
+		return partial.getParent('[data-partial-line-id]');
+	};
+	//given a partial, attempts to find the container it is in
+	//for example, for a td that is a partial, it may have the tr as its line and the table as its container
+	var getPartialContainers = function(partial, jframe){
+		var containers = {
+			container: partial.getParent('[data-partial-container-id]')
 		};
-	
-		keys.every(function(key) {
-			//get the partial from both sets
-			var p1 = partials1[key],
-					p2 = partials2[key];
-			//if they are present
-			if (p1 && p2) {
-				//and their *original* html doesn't match, then mark it for update
-				if (p1.retrieve('partialRefresh:unaltered') != p2.retrieve('partialRefresh:unaltered')) result.update.push(key);
-				//continue looping
-				return true;
-			} else {
-				//mismatch, the batch is spoiled, we reload the whole view
-				result.spoiled = true;
-				//break looping
-				return false;
-			}
-		});
-		return result;
+		if (containers.container) {
+			containers.DOMcontainer = $(jframe).getElement('[data-partial-container-id=' + 
+			  containers.container.get('data', 'partial-container-id') + ']');
+		}
+		return containers;
+	};
+
+	//given two partials, compares their raw HTML before they were parsed by filters
+	var compare = function(before, after){
+		return before.retrieve('partialRefresh:unaltered') == after.retrieve('partialRefresh:unaltered');
 	};
 
 })();
