@@ -64,6 +64,7 @@ script: CCS.JFrame.AjaxLoad.js
 				ignorePartialRefresh: true,
 				ignoreAutoRefresh: true,
 				suppressLoadComplete: true,
+				resetAutoRefresh: true,
 				retainPath: true,
 				callback: function(data){
 					switch(action){

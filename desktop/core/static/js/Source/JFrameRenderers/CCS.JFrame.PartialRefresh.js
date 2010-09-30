@@ -50,7 +50,7 @@ script: CCS.JFrame.PartialRefresh.js
 			if (options && options.ignorePartialRefresh) return;
 			var jState = getJState(this);
 			//get the partial containers; containers that have elements in them to be partially refreshed
-			var partialContainers = content.elements.filter('.partial_refresh');
+			var partialContainers = new Element('div').adopt(content.elements).getElements('.partial_refresh');
 			var setPrevPath = function(){
 				jState.prevPath = options ? options.responsePath : null;
 			};
@@ -66,10 +66,7 @@ script: CCS.JFrame.PartialRefresh.js
 			var partials = getPartials(new Element('div').adopt(partialContainers), true);
 			//if the options aren't defined or if we didn't auto refresh, reset and
 			//return (fall through to other renderers)
-			if (!(options && options.autorefreshed) &&
-					//or if the last time we loaded we stored partials but the url has changed
-					//(i.e. a new page is loaded, this one also having partials)
-					(jState.prevPath != options.responsePath && !options.forcePartial)) {
+			if (!options || !(options.autorefreshed || options.forcePartial)) {
 				//...then store the state and render as usual (fall through to other renderers)
 				if (enableLog) dbug.log('not auto refreshed (%s), or new path (%s != %s) and not forced (%s), existing partial refresh after setup', !options.autorefreshed, jState.prevPath, options.responsePath, options.forcePartial);
 				setPrevPath();
@@ -233,10 +230,11 @@ script: CCS.JFrame.PartialRefresh.js
 						}
 					}
 				}
-				jState.partials[id] = partial;
+				if (renderedIds[id]) jState.partials[id] = partial;
 				prevId = id;
 			}, this);
-			//for any partials that were in the DOM but not in the response, remove them
+			
+			//given a line, destroy it
 			var destroyLine = function(line){
 				if (enableLog) dbug.log('destroying line:', line);
 				this.behavior.cleanup(line);
@@ -244,15 +242,21 @@ script: CCS.JFrame.PartialRefresh.js
 			}.bind(this);
 
 			var prevLine;
-			for (id in jState.partials) {
+			//for any partials that were in the DOM but not in the response, remove them
+			jState.partials.each(function(partial, id){
+				//if the partial is in the DOM but not the response
 				if (!partials[id]) {
-					var line = getPartialLine(jState.partials[id]);
+					//get its line; assume that we have to remove that, too
+					var line = getPartialLine(partial);
 					if (enableLog) dbug.log('destroying %s', id, line);
+					//destroy the partial
 					destroy(id);
+					//if we've reached a new line, destroy the old one
 					if (prevLine && line != prevLine) destroyLine(prevLine);
 					prevLine = line;
 				}
-			}
+			});
+			//if we ended with a previous line defined, destroy it.
 			if (prevLine) destroyLine(prevLine);
 
 			//we've updated the display, so tell filters that are waiting that they may need to update their display, too

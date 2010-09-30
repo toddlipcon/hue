@@ -264,7 +264,7 @@ CCS.JFrame = new Class({
 	 *   options: see renderContent's options
 	 */
 	load: function(options){
-		this.fireEvent('request', [options.requestPath, options.userData]);
+		this.fireEvent('request', [options.requestPath, options.userData, options]);
 		var req = new Request();
 		this._setRequestOptions(req, 
 			$merge(options, {
@@ -710,8 +710,10 @@ CCS.JFrame = new Class({
 				this._request = request;
 			}.bind(this),
 			onSuccess: function(requestTxt){
-				this._requestSuccessHandler(request, requestTxt, options);
-				this._request = null;
+				if (!options.requestChecker || options.requestChecker(requestTxt, request, options)) {
+					this._requestSuccessHandler(request, requestTxt, options);
+					this._request = null;
+				}
 			}.bind(this),
 			onCcsErrorPopup: function(alert){
 				alert.addEvent('destroy', function(){
